@@ -1,0 +1,41 @@
+{
+    "students": [
+      {
+        "id": 1,
+        "previous_grades": [85, 90, 92],
+        "transcript": {
+          "GPA": 3.6
+        },
+        "syllabus_info": {
+          "assignment_weight": 0.3,
+          "exam_weight": 0.7
+        },
+        "final_grade": 90
+      },
+      {
+        "id": 2,
+        "previous_grades": [70, 75, 78],
+        "transcript": {
+          "GPA": 2.8
+        },
+        "syllabus_info": {
+          "assignment_weight": 0.5,
+          "exam_weight": 0.5
+        },
+        "final_grade": 80
+      },
+      {
+        "id": 3,
+        "previous_grades": [88, 90, 85],
+        "transcript": {
+          "GPA": 3.5
+        },
+        "syllabus_info": {
+          "assignment_weight": 0.4,
+          "exam_weight": 0.6
+        },
+        "final_grade": 88
+      }
+    ]
+  }
+  
