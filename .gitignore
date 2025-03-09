@@ -52,6 +52,28 @@ out/
 .cache/
 .parcel-cache
 
+# More specific virtual environment patterns
+**/venvsource/
+backend/venvsource/
+**/venv*/
+**/virtualenv*/
+
+# GitHub Actions
+.github/workflows/
+
+# Firebase local emulator data
+**/emulator-data/
+
+# Firebase service account keys and sensitive configs
+**/*-firebase-adminsdk-*.json
+**/*.serviceaccount.json
+**/serviceAccountKey.json
+
+# Local environment files that might contain secrets
+**/.env.*
+**/.secret.*
+**/secrets.*
+
 # IDE specific files
 .idea/
 .vscode/
