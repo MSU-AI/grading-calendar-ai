@@ -1,0 +1,12 @@
+{
+  "name": "grading-calendar-ai",
+  "version": "1.0.0",
+  "description": "Grading Calendar AI Project",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "start": "cd frontend && npm start",
+    "test": "cd frontend && npm test",
+    "deploy": "firebase deploy"
+  },
+  "private": true
+}
