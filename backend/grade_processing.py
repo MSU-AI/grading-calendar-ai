@@ -1,6 +1,7 @@
 import fitz  # PyMuPDF
 import openai
 import os
+import json
 from dotenv import load_dotenv
 
 # Load API Key
@@ -49,6 +50,12 @@ def extract_and_process_pdf(pdf_file):
         ]
     )
 
-    structured_data = response.choices[0].message.content
-    return structured_data  # JSON-like extracted data
+    # Ensure response is formatted as JSON
+    try:
+        structured_data = json.loads(response.choices[0].message.content)
+    except json.JSONDecodeError:
+        raise ValueError("GPT response was not in valid JSON format.")
+
+    return structured_data  # Return a dictionary, not a string
+
 
