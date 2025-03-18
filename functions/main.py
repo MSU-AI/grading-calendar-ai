@@ -20,14 +20,6 @@ from openai_api import (
 from storage import (
     get_upload_url
 )
-from ml_predict import (
-    predict_with_linear_regression,
-    add_training_data
-)
-from combined_predict import (
-    get_combined_prediction,
-    get_latest_predictions
-)
 from document_processing import (
     upload_and_process_document,
     get_document_status,
@@ -55,12 +47,6 @@ __all__ = [
     'extract_assignments',
     # Storage functions
     'get_upload_url',
-    # ML prediction functions
-    'predict_with_linear_regression',
-    'add_training_data',
-    # Combined prediction functions
-    'get_combined_prediction',
-    'get_latest_predictions',
     # Document processing functions
     'upload_and_process_document',
     'get_document_status',

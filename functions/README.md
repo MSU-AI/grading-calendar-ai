@@ -8,7 +8,7 @@ The application uses Firebase Cloud Functions to:
 
 1. Upload and process PDF documents (syllabus and transcript)
 2. Extract text from PDFs using OCR
-3. Predict final grades using both ChatGPT and Linear Regression models
+3. Predict final grades using ChatGPT
 4. Store predictions and analyses in Firestore
 
 ## Function Categories
@@ -37,16 +37,6 @@ The application uses Firebase Cloud Functions to:
 
 - `get_upload_url`: Generate a signed URL for uploading a PDF to Firebase Storage
 
-### ML Prediction Functions
-
-- `predict_with_linear_regression`: Predict final grade using Linear Regression model
-- `add_training_data`: Add new training data for the linear regression model
-
-### Combined Prediction Functions
-
-- `get_combined_prediction`: Get combined prediction from both ChatGPT and Linear Regression models
-- `get_latest_predictions`: Get the latest predictions for a user
-
 ### Document Processing Functions
 
 - `upload_and_process_document`: Upload and process a document (syllabus or transcript)
@@ -59,7 +49,7 @@ The application uses Firebase Cloud Functions to:
 2. PDFs are stored in Firebase Storage
 3. OCR extracts text from PDFs
 4. Extracted text is processed to get structured data
-5. Structured data is used to predict final grades
+5. Structured data is used to predict final grades using ChatGPT
 6. Predictions are stored in Firestore
 
 ## Database Structure
@@ -71,12 +61,9 @@ The application uses Firebase Cloud Functions to:
 - `/users/{userId}/syllabi/{syllabusId}`: Structured syllabus data
 - `/users/{userId}/transcripts/{transcriptId}`: Structured transcript data
 - `/users/{userId}/predictions/{predictionId}`: ChatGPT predictions
-- `/users/{userId}/ml_predictions/{predictionId}`: Linear Regression predictions
-- `/users/{userId}/combined_predictions/{predictionId}`: Combined predictions
 - `/users/{userId}/analyses/{analysisId}`: Grade analyses
 - `/users/{userId}/assignments/{assignmentsId}`: Extracted assignments
 - `/users/{userId}/document_uploads/{documentId}`: Document upload metadata
-- `/training_data/students`: Training data for Linear Regression model
 
 ### Firebase Storage
 
@@ -93,7 +80,5 @@ The application uses Firebase Cloud Functions to:
 - `firebase_admin`: Firebase Admin SDK
 - `google-cloud-firestore`: Google Cloud Firestore SDK
 - `openai`: OpenAI API SDK
-- `numpy`: Numerical computing library
-- `scikit-learn`: Machine learning library
 - `PyMuPDF`: PDF processing library
 - `python-dotenv`: Environment variable management
