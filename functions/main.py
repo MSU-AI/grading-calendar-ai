@@ -1,14 +1,8 @@
 from firebase_functions import https_fn
 from firebase_admin import initialize_app, firestore
 import logging
-from ocr import (
-    process_uploaded_pdf,
-    get_document_info,
-    extract_pdf_text
-)
-from document_processing import (
-    upload_and_process_document
-)
+from document_info import get_document_info
+from document_processing import upload_and_process_document
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,23 +41,9 @@ def simple_predict_grade(req: https_fn.CallableRequest) -> dict:
                 doc_data = doc.to_dict()
                 text = doc_data.get("text", "")
                 
-                # If text is not extracted yet, try to extract it
+                # If text is not extracted yet, skip this document
                 if not text and doc_data.get("filePath"):
-                    logger.info(f"Text not found for {doc_type}, attempting extraction")
-                    try:
-                        # Call extract_pdf_text directly
-                        from ocr import extract_pdf_text
-                        result = extract_pdf_text({
-                            "auth": {"uid": user_id},
-                            "data": {"documentType": doc_type}
-                        })
-                        
-                        # Refresh the document to get the extracted text
-                        doc = doc_ref.get()
-                        doc_data = doc.to_dict()
-                        text = doc_data.get("text", "")
-                    except Exception as e:
-                        logger.error(f"Error extracting text: {str(e)}")
+                    logger.info(f"Text not found for {doc_type}, skipping")
                 
                 if text:
                     docs[doc_type] = text
@@ -116,10 +96,8 @@ def simple_predict_grade(req: https_fn.CallableRequest) -> dict:
 
 # Re-export all functions
 __all__ = [
-    # OCR functions
-    'process_uploaded_pdf',
+    # Document info functions
     'get_document_info',
-    'extract_pdf_text',
     # Prediction functions
     'simple_predict_grade',
     # Document processing functions

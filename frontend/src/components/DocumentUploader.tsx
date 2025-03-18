@@ -104,11 +104,24 @@ const DocumentUploader: React.FC = () => {
           const data = result.data as any;
           
           if (data.success) {
-            setProcessingStatus('Document uploaded successfully. Processing...');
+            setProcessingStatus('Document uploaded successfully. Extracting text...');
             
-            // Poll for document status
-            const documentId = data.documentId;
-            checkDocumentStatus(documentId);
+            // Call the new Node.js text extraction function
+            const extractText = httpsCallable(functions, 'extractPdfText');
+            const extractResult = await extractText({
+              documentType: documentType
+            });
+            
+            const extractData = extractResult.data as any;
+            
+            if (extractData.success) {
+              setProcessingStatus(`Successfully extracted ${extractData.textLength} characters. Predicting grade...`);
+              predictGrade();
+            } else {
+              setError('Text extraction failed: ' + (extractData.message || 'Unknown error'));
+              setProcessingStatus('');
+              setIsUploading(false);
+            }
           } else {
             setError('Upload failed: ' + (data.message || 'Unknown error'));
             setProcessingStatus('');
