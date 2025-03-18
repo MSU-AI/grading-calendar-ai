@@ -5,34 +5,50 @@ const tmp = require('tmp');
 const fs = require('fs');
 const OpenAI = require('openai');
 
+// Initialize Firebase Admin
 admin.initializeApp();
+
+// Get OpenAI API key from Firebase configuration or environment variable
+function getOpenAIApiKey() {
+  const apiKey = process.env.OPENAI_API_KEY || 
+                (functions.config().openai && functions.config().openai.apikey);
+  
+  if (!apiKey) {
+    console.error('OpenAI API key not found in environment or Firebase config');
+    throw new Error('OpenAI API key not configured. Please set OPENAI_API_KEY or firebase config openai.apikey');
+  }
+  
+  return apiKey;
+}
 
 /**
  * Triggered when a PDF is uploaded to Firebase Storage
  * Path format: users/{userId}/{documentType}/{filename}.pdf
  */
 exports.processPdfUpload = functions.storage.object().onFinalize(async (object) => {
-  const filePath = object.name;
-  
-  // Only process PDFs in the user's directory
-  if (!filePath || !filePath.startsWith('users/') || !filePath.endsWith('.pdf')) {
-    console.log(`Skipping non-PDF file or invalid path: ${filePath}`);
-    return null;
-  }
-  
-  // Extract user ID and document type from path
-  // Expected format: users/{userId}/{documentType}/{filename}.pdf
-  const pathParts = filePath.split('/');
-  if (pathParts.length < 4) {
-    console.log(`Invalid path format: ${filePath}`);
-    return null;
-  }
-  
-  const userId = pathParts[1];
-  const documentType = pathParts[2]; // "syllabus" or "transcript"
-  
   try {
-    console.log(`Processing uploaded PDF: ${filePath}`);
+    console.log('processPdfUpload triggered with object:', JSON.stringify(object));
+    
+    const filePath = object.name;
+    
+    // Only process PDFs in the user's directory
+    if (!filePath || !filePath.startsWith('users/') || !filePath.endsWith('.pdf')) {
+      console.log(`Skipping non-PDF file or invalid path: ${filePath}`);
+      return null;
+    }
+    
+    // Extract user ID and document type from path
+    // Expected format: users/{userId}/{documentType}/{filename}.pdf
+    const pathParts = filePath.split('/');
+    if (pathParts.length < 4) {
+      console.log(`Invalid path format: ${filePath}, pathParts: ${JSON.stringify(pathParts)}`);
+      return null;
+    }
+    
+    const userId = pathParts[1];
+    const documentType = pathParts[2]; // "syllabus" or "transcript"
+    
+    console.log(`Processing uploaded PDF: ${filePath} for user: ${userId}, type: ${documentType}`);
     
     // Store basic information in Firestore
     const db = admin.firestore();
@@ -48,16 +64,21 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
     
     // Automatically extract text from the PDF
     try {
+      console.log(`Starting automatic text extraction for ${filePath}`);
       await extractTextFromPdf(userId, documentType, filePath);
+      console.log(`Automatic text extraction completed for ${filePath}`);
     } catch (extractError) {
       console.error(`Error automatically extracting text: ${extractError}`);
+      console.error(`Error stack: ${extractError.stack}`);
       // Continue execution even if extraction fails - user can retry later
     }
     
+    console.log(`processPdfUpload completed successfully for ${filePath}`);
     return null;
   } catch (error) {
-    console.error(`Error processing uploaded PDF: ${error}`);
-    return null;
+    console.error(`Error in processPdfUpload: ${error}`);
+    console.error(`Error stack: ${error.stack}`);
+    return null; // Storage triggers must return null on error
   }
 });
 
@@ -65,31 +86,38 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
  * Callable function to extract text from a PDF
  */
 exports.extractPdfText = functions.https.onCall(async (data, context) => {
-  // Ensure user is authenticated
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      'unauthenticated',
-      'User must be authenticated'
-    );
-  }
-  
-  const userId = context.auth.uid;
-  const { documentType } = data;
-  
-  if (!documentType || !['syllabus', 'transcript', 'grades'].includes(documentType)) {
-    throw new functions.https.HttpsError(
-      'invalid-argument',
-      'Valid document type (syllabus, transcript, or grades) is required'
-    );
-  }
-  
   try {
+    console.log('extractPdfText called with data:', JSON.stringify(data));
+    
+    // Ensure user is authenticated
+    if (!context.auth) {
+      console.error('Authentication required for extractPdfText');
+      throw new functions.https.HttpsError(
+        'unauthenticated',
+        'User must be authenticated'
+      );
+    }
+    
+    const userId = context.auth.uid;
+    const { documentType } = data;
+    
+    console.log(`extractPdfText for user: ${userId}, documentType: ${documentType}`);
+    
+    if (!documentType || !['syllabus', 'transcript', 'grades'].includes(documentType)) {
+      console.error(`Invalid document type: ${documentType}`);
+      throw new functions.https.HttpsError(
+        'invalid-argument',
+        'Valid document type (syllabus, transcript, or grades) is required'
+      );
+    }
+    
     // Get document info from Firestore
     const db = admin.firestore();
     const docRef = db.collection('users').doc(userId).collection('documents').doc(documentType);
     const doc = await docRef.get();
     
     if (!doc.exists) {
+      console.error(`Document not found: users/${userId}/documents/${documentType}`);
       throw new functions.https.HttpsError(
         'not-found',
         `${documentType} not found`
@@ -100,14 +128,19 @@ exports.extractPdfText = functions.https.onCall(async (data, context) => {
     const filePath = docData.filePath;
     
     if (!filePath) {
+      console.error(`File path not found for ${documentType}`);
       throw new functions.https.HttpsError(
         'not-found',
         `File path not found for ${documentType}`
       );
     }
     
+    console.log(`Starting text extraction for ${filePath}`);
+    
     // Extract text from the PDF
     const extractedText = await extractTextFromPdf(userId, documentType, filePath);
+    
+    console.log(`Text extraction successful, ${extractedText.length} characters extracted`);
     
     return {
       success: true,
@@ -116,10 +149,12 @@ exports.extractPdfText = functions.https.onCall(async (data, context) => {
       textLength: extractedText.length
     };
   } catch (error) {
-    console.error(`Error extracting text from PDF: ${error}`);
+    console.error(`Error in extractPdfText: ${error}`);
+    console.error(`Error stack: ${error.stack}`);
     throw new functions.https.HttpsError(
       'internal',
-      `Error extracting text from ${documentType}: ${error.message}`
+      `Error extracting text: ${error.message}`,
+      { detailedError: error.toString() }
     );
   }
 });
@@ -128,17 +163,19 @@ exports.extractPdfText = functions.https.onCall(async (data, context) => {
  * Callable function to predict grades based on extracted document data
  */
 exports.predictGrades = functions.https.onCall(async (data, context) => {
-  // Ensure user is authenticated
-  if (!context.auth) {
-    throw new functions.https.HttpsError(
-      'unauthenticated',
-      'User must be authenticated'
-    );
-  }
-  
-  const userId = context.auth.uid;
-  
   try {
+    console.log('predictGrades called with data:', JSON.stringify(data));
+    
+    // Ensure user is authenticated
+    if (!context.auth) {
+      console.error('Authentication required for predictGrades');
+      throw new functions.https.HttpsError(
+        'unauthenticated',
+        'User must be authenticated'
+      );
+    }
+    
+    const userId = context.auth.uid;
     console.log(`Starting grade prediction for user ${userId}`);
     
     // Get all documents for the user
@@ -148,11 +185,15 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
     // Try to get syllabus, transcript, and grades
     const docTypes = ["syllabus", "transcript", "grades"];
     for (const docType of docTypes) {
+      console.log(`Checking for ${docType} document`);
+      
       const docRef = db.collection('users').doc(userId).collection('documents').doc(docType);
       const doc = await docRef.get();
       
       if (doc.exists) {
         const docData = doc.data();
+        console.log(`Found ${docType} document: ${JSON.stringify(docData)}`);
+        
         const text = docData.text || "";
         
         // If text is not extracted yet, skip this document
@@ -164,6 +205,8 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
           docs[docType] = text;
           console.log(`Found ${text.length} characters of text for ${docType}`);
         }
+      } else {
+        console.log(`${docType} document not found`);
       }
     }
     
@@ -176,10 +219,14 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
     }
     
     // Process the extracted text to structured data
+    console.log("Processing extracted text to structured data");
     let structuredData = await processExtractedText(docs);
+    console.log("Structured data:", JSON.stringify(structuredData));
     
     // Generate prediction based on structured data
+    console.log("Generating prediction");
     const prediction = await generatePrediction(structuredData);
+    console.log("Prediction result:", JSON.stringify(prediction));
     
     // Store prediction in Firestore
     const predictionRef = db.collection('users').doc(userId).collection('predictions').doc();
@@ -189,6 +236,7 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
       documents: Object.keys(docs)
     };
     
+    console.log("Storing prediction in Firestore");
     await predictionRef.set(predictionData);
     
     console.log("Grade prediction completed successfully");
@@ -199,10 +247,12 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
       message: "Grade prediction completed successfully"
     };
   } catch (error) {
-    console.error(`Error predicting grade: ${error}`);
+    console.error(`Error in predictGrades: ${error}`);
+    console.error(`Error stack: ${error.stack}`);
     throw new functions.https.HttpsError(
       'internal',
-      `Error predicting grade: ${error.message}`
+      `Error predicting grade: ${error.message}`,
+      { detailedError: error.toString() }
     );
   }
 });
@@ -211,55 +261,94 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
  * Helper function to extract text from a PDF
  */
 async function extractTextFromPdf(userId, documentType, filePath) {
-  console.log(`Extracting text from ${documentType} PDF: ${filePath}`);
+  console.log(`Extracting text from ${documentType} PDF: ${filePath} for user ${userId}`);
   
-  // Download file from Firebase Storage
-  const bucket = admin.storage().bucket();
-  const tempFile = tmp.fileSync({ postfix: '.pdf' });
+  // Get a reference to the default bucket
+  const bucket = admin.storage().bucket('gradingai.appspot.com');
+  console.log(`Using bucket: ${bucket.name}`);
   
-  await bucket.file(filePath).download({
-    destination: tempFile.name
-  });
-  
-  console.log(`PDF downloaded to temporary file: ${tempFile.name}`);
-  
-  // Extract text using pdf-parse
-  const dataBuffer = fs.readFileSync(tempFile.name);
-  const pdfData = await pdfParse(dataBuffer);
-  const extractedText = pdfData.text;
-  
-  console.log(`Successfully extracted ${extractedText.length} characters of text`);
-  
-  // Clean up the temp file
-  tempFile.removeCallback();
-  
-  // Update document in Firestore with extracted text
-  const db = admin.firestore();
-  const docRef = db.collection('users').doc(userId).collection('documents').doc(documentType);
-  
-  await docRef.update({
-    text: extractedText,
-    lastExtracted: admin.firestore.FieldValue.serverTimestamp(),
-    status: 'processed'
-  });
-  
-  return extractedText;
+  let tempFile = null;
+  try {
+    // Create a temporary file
+    tempFile = tmp.fileSync({ postfix: '.pdf' });
+    console.log(`Created temporary file: ${tempFile.name}`);
+    
+    // Download file from Firebase Storage
+    console.log(`Downloading file from path: ${filePath}`);
+    await bucket.file(filePath).download({
+      destination: tempFile.name
+    });
+    
+    console.log(`PDF downloaded to temporary file: ${tempFile.name}`);
+    
+    // Extract text using pdf-parse
+    const dataBuffer = fs.readFileSync(tempFile.name);
+    console.log(`Read ${dataBuffer.length} bytes from temporary file`);
+    
+    console.log('Starting PDF parsing');
+    const pdfData = await pdfParse(dataBuffer, {
+      // Add options to make parsing more robust
+      pagerender: null, // Disable page rendering
+      max: 0 // No page limit
+    });
+    
+    const extractedText = pdfData.text;
+    console.log(`Successfully extracted ${extractedText.length} characters of text from ${pdfData.numpages} pages`);
+    
+    // Update document in Firestore with extracted text
+    const db = admin.firestore();
+    const docRef = db.collection('users').doc(userId).collection('documents').doc(documentType);
+    
+    // Use set with merge to ensure we don't overwrite existing data
+    console.log(`Updating Firestore document with extracted text`);
+    await docRef.set({
+      text: extractedText,
+      lastExtracted: admin.firestore.FieldValue.serverTimestamp(),
+      status: 'processed',
+      pageCount: pdfData.numpages
+    }, { merge: true });
+    
+    console.log(`Firestore document updated successfully`);
+    return extractedText;
+  } catch (error) {
+    console.error(`Error extracting text from PDF: ${error}`);
+    console.error(`Error stack: ${error.stack}`);
+    throw error; // Re-throw to be handled by the calling function
+  } finally {
+    // Clean up the temp file
+    if (tempFile) {
+      console.log(`Cleaning up temporary file: ${tempFile.name}`);
+      tempFile.removeCallback();
+    }
+  }
 }
 
 /**
  * Process extracted text into structured data
  */
 async function processExtractedText(docs) {
+  console.log('Processing extracted text into structured data');
   const structuredData = {};
   
+  // Get API key
+  let apiKey;
+  try {
+    apiKey = getOpenAIApiKey();
+  } catch (error) {
+    console.error(`Error getting OpenAI API key: ${error}`);
+    throw error;
+  }
+  
+  // Initialize OpenAI client
+  const openai = new OpenAI({
+    apiKey: apiKey
+  });
+  
   if (docs.syllabus) {
-    // Initialize OpenAI client
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-    
+    console.log('Processing syllabus text');
     try {
       // Process syllabus text with OpenAI
+      console.log('Calling OpenAI API for syllabus processing');
       const response = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
@@ -267,15 +356,22 @@ async function processExtractedText(docs) {
             role: "system",
             content: "Extract the following information from this syllabus in JSON format: course_name, instructor, grade_weights (array of {name, weight}), assignments (array), due_dates (array of {assignment, due_date}), credit_hours"
           },
-          { role: "user", content: docs.syllabus }
+          { role: "user", content: docs.syllabus.substring(0, 4000) } // Limit length to avoid token limits
         ]
       });
       
-      const syllabusData = JSON.parse(response.choices[0].message.content);
+      const content = response.choices[0].message.content;
+      console.log(`OpenAI response for syllabus: ${content.substring(0, 200)}...`);
+      
+      const syllabusData = JSON.parse(content);
       structuredData.syllabus = syllabusData;
+      console.log('Successfully parsed syllabus data');
     } catch (error) {
-      console.error("Error processing syllabus with OpenAI:", error);
+      console.error(`Error processing syllabus with OpenAI: ${error}`);
+      console.error(`Error stack: ${error.stack}`);
+      
       // Provide fallback structured data
+      console.log('Using fallback syllabus data');
       structuredData.syllabus = {
         course_name: "Unknown Course",
         instructor: "Unknown Instructor",
@@ -291,13 +387,10 @@ async function processExtractedText(docs) {
   }
   
   if (docs.transcript) {
-    // Initialize OpenAI client if not already initialized
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-    
+    console.log('Processing transcript text');
     try {
       // Process transcript text with OpenAI
+      console.log('Calling OpenAI API for transcript processing');
       const response = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
@@ -305,15 +398,22 @@ async function processExtractedText(docs) {
             role: "system",
             content: "Extract the following information from this transcript in JSON format: gpa, final_grade"
           },
-          { role: "user", content: docs.transcript }
+          { role: "user", content: docs.transcript.substring(0, 4000) } // Limit length to avoid token limits
         ]
       });
       
-      const transcriptData = JSON.parse(response.choices[0].message.content);
+      const content = response.choices[0].message.content;
+      console.log(`OpenAI response for transcript: ${content.substring(0, 200)}...`);
+      
+      const transcriptData = JSON.parse(content);
       structuredData.transcript = transcriptData;
+      console.log('Successfully parsed transcript data');
     } catch (error) {
-      console.error("Error processing transcript with OpenAI:", error);
+      console.error(`Error processing transcript with OpenAI: ${error}`);
+      console.error(`Error stack: ${error.stack}`);
+      
       // Provide fallback structured data
+      console.log('Using fallback transcript data');
       structuredData.transcript = {
         gpa: "3.0",
         final_grade: "B"
@@ -322,13 +422,10 @@ async function processExtractedText(docs) {
   }
   
   if (docs.grades) {
-    // Initialize OpenAI client if not already initialized
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-    
+    console.log('Processing grades text');
     try {
       // Process grades text with OpenAI
+      console.log('Calling OpenAI API for grades processing');
       const response = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
@@ -336,19 +433,27 @@ async function processExtractedText(docs) {
             role: "system",
             content: "Extract current grades from this document in JSON format as an array of {name, grade}"
           },
-          { role: "user", content: docs.grades }
+          { role: "user", content: docs.grades.substring(0, 4000) } // Limit length to avoid token limits
         ]
       });
       
-      const gradesData = JSON.parse(response.choices[0].message.content);
+      const content = response.choices[0].message.content;
+      console.log(`OpenAI response for grades: ${content.substring(0, 200)}...`);
+      
+      const gradesData = JSON.parse(content);
       structuredData.grades = gradesData;
+      console.log('Successfully parsed grades data');
     } catch (error) {
-      console.error("Error processing grades with OpenAI:", error);
+      console.error(`Error processing grades with OpenAI: ${error}`);
+      console.error(`Error stack: ${error.stack}`);
+      
       // Provide fallback structured data
+      console.log('Using fallback grades data');
       structuredData.grades = [];
     }
   }
   
+  console.log('Finished processing extracted text');
   return structuredData;
 }
 
@@ -356,16 +461,29 @@ async function processExtractedText(docs) {
  * Generate prediction using OpenAI API
  */
 async function generatePrediction(structuredData) {
+  console.log('Generating prediction using OpenAI API');
+  
+  // Get API key
+  let apiKey;
+  try {
+    apiKey = getOpenAIApiKey();
+  } catch (error) {
+    console.error(`Error getting OpenAI API key: ${error}`);
+    throw error;
+  }
+  
   // Initialize OpenAI client
   const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: apiKey
   });
   
   // Construct the prompt using the same structure as the Python code
   const prompt = constructPrompt(structuredData);
+  console.log(`Constructed prompt: ${prompt.substring(0, 200)}...`);
   
   try {
     // Call the OpenAI API
+    console.log('Calling OpenAI API for prediction');
     const response = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
@@ -376,13 +494,17 @@ async function generatePrediction(structuredData) {
     
     // Extract and parse the prediction
     const predictionText = response.choices[0].message.content;
+    console.log(`OpenAI prediction response: ${predictionText}`);
     
     try {
       // Parse the JSON response
       const prediction = JSON.parse(predictionText);
+      console.log('Successfully parsed prediction JSON');
       return prediction;
     } catch (parseError) {
-      console.error("Failed to parse OpenAI response as JSON:", parseError);
+      console.error(`Failed to parse OpenAI response as JSON: ${parseError}`);
+      console.error(`Raw response was: ${predictionText}`);
+      
       // Return a fallback prediction if parsing fails
       return {
         grade: "B",
@@ -390,7 +512,9 @@ async function generatePrediction(structuredData) {
       };
     }
   } catch (error) {
-    console.error("Error calling OpenAI API:", error);
+    console.error(`Error calling OpenAI API: ${error}`);
+    console.error(`Error stack: ${error.stack}`);
+    
     // Return a fallback prediction if the API call fails
     return {
       grade: "C+",
@@ -403,39 +527,50 @@ async function generatePrediction(structuredData) {
  * Construct the prompt for OpenAI - identical to the Python implementation
  */
 function constructPrompt(data) {
+  console.log('Constructing prompt for OpenAI');
   const promptLines = [];
   
-  // Basic information
-  promptLines.push(`Course Name: ${data.syllabus.course_name}`);
-  promptLines.push(`Instructor: ${data.syllabus.instructor}`);
-  
-  // Grade weights
-  promptLines.push("Grade Weights:");
-  for (const gw of data.syllabus.grade_weights) {
-    promptLines.push(`  - ${gw.name}: ${gw.weight}`);
+  try {
+    // Basic information
+    promptLines.push(`Course Name: ${data.syllabus.course_name}`);
+    promptLines.push(`Instructor: ${data.syllabus.instructor}`);
+    
+    // Grade weights
+    promptLines.push("Grade Weights:");
+    for (const gw of data.syllabus.grade_weights) {
+      promptLines.push(`  - ${gw.name}: ${gw.weight}`);
+    }
+    
+    // Assignments
+    const assignmentsStr = data.syllabus.assignments.join(", ");
+    promptLines.push(`Assignments: ${assignmentsStr}`);
+    
+    // GPA, final grade, and credit hours
+    const gpa = data.transcript?.gpa || "N/A";
+    const finalGrade = data.transcript?.final_grade || "N/A";
+    promptLines.push(`GPA: ${gpa}`);
+    promptLines.push(`Current/Previous Final Grade: ${finalGrade}`);
+    promptLines.push(`Credit Hours: ${data.syllabus.credit_hours}`);
+    
+    // Due dates
+    promptLines.push("Due Dates:");
+    for (const dd of data.syllabus.due_dates) {
+      promptLines.push(`  - ${dd.assignment} due on ${dd.due_date}`);
+    }
+    
+    // Final instruction
+    promptLines.push(
+      "Based on these details, predict the student's final grade. " +
+      "Output exactly in JSON format with two keys: 'grade' (a numeric value) " +
+      "and 'reasoning' (a short explanation). Do not include extra text."
+    );
+    
+    return promptLines.join("\n");
+  } catch (error) {
+    console.error(`Error constructing prompt: ${error}`);
+    console.error(`Data structure: ${JSON.stringify(data)}`);
+    
+    // Return a simplified prompt if there was an error
+    return "Based on the available student data, predict the student's final grade. Output exactly in JSON format with two keys: 'grade' (a numeric value) and 'reasoning' (a short explanation). Do not include extra text.";
   }
-  
-  // Assignments
-  const assignmentsStr = data.syllabus.assignments.join(", ");
-  promptLines.push(`Assignments: ${assignmentsStr}`);
-  
-  // GPA, final grade, and credit hours
-  promptLines.push(`GPA: ${data.transcript?.gpa || "N/A"}`);
-  promptLines.push(`Current/Previous Final Grade: ${data.transcript?.final_grade || "N/A"}`);
-  promptLines.push(`Credit Hours: ${data.syllabus.credit_hours}`);
-  
-  // Due dates
-  promptLines.push("Due Dates:");
-  for (const dd of data.syllabus.due_dates) {
-    promptLines.push(`  - ${dd.assignment} due on ${dd.due_date}`);
-  }
-  
-  // Final instruction
-  promptLines.push(
-    "Based on these details, predict the student's final grade. " +
-    "Output exactly in JSON format with two keys: 'grade' (a numeric value) " +
-    "and 'reasoning' (a short explanation). Do not include extra text."
-  );
-  
-  return promptLines.join("\n");
 }
