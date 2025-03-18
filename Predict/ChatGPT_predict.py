@@ -3,27 +3,52 @@ import openai
 import os
 
 def load_data(json_file_path):
-    """Load student data from a JSON file."""
+    """Load course/student data from a JSON file."""
     with open(json_file_path, 'r') as f:
         data = json.load(f)
     return data
 
-def construct_prompt(student_data):
+def construct_prompt(course_data):
     """
-    Construct a concise prompt using student details.
-    The prompt instructs ChatGPT to output a JSON object with two keys: "grade" and "reasoning".
+    Construct a concise prompt using the new JSON format:
+      course_name, instructor, grade_weights, assignments,
+      gpa, final_grade, due_dates, credit_hours.
+    The prompt instructs ChatGPT to output a JSON object
+    with two keys: "grade" and "reasoning".
     """
-    prompt = (
-        f"Student details:\n"
-        f"- Grades: {student_data['previous_grades']}\n"
-        f"- GPA: {student_data['transcript']['GPA']}\n"
-        f"- Assignment weight: {student_data['syllabus_info']['assignment_weight']}\n"
-        f"- Exam weight: {student_data['syllabus_info']['exam_weight']}\n\n"
+    prompt_lines = []
+    
+    # Basic information
+    prompt_lines.append(f"Course Name: {course_data['course_name']}")
+    prompt_lines.append(f"Instructor: {course_data['instructor']}")
+    
+    # Grade weights
+    prompt_lines.append("Grade Weights:")
+    for gw in course_data["grade_weights"]:
+        prompt_lines.append(f"  - {gw['name']}: {gw['weight']}")
+    
+    # Assignments
+    assignments_str = ", ".join(course_data["assignments"])
+    prompt_lines.append(f"Assignments: {assignments_str}")
+    
+    # GPA, final grade, and credit hours
+    prompt_lines.append(f"GPA: {course_data['gpa']}")
+    prompt_lines.append(f"Current/Previous Final Grade: {course_data['final_grade']}")
+    prompt_lines.append(f"Credit Hours: {course_data['credit_hours']}")
+    
+    # Due dates
+    prompt_lines.append("Due Dates:")
+    for dd in course_data["due_dates"]:
+        prompt_lines.append(f"  - {dd['assignment']} due on {dd['due_date']}")
+    
+    # Final instruction
+    prompt_lines.append(
         "Based on these details, predict the student's final grade. "
-        "Output exactly in JSON format with two keys: 'grade' (a numeric value) and "
-        "'reasoning' (a short explanation). Do not include any extra text."
+        "Output exactly in JSON format with two keys: 'grade' (a numeric value) "
+        "and 'reasoning' (a short explanation). Do not include extra text."
     )
-    return prompt
+    
+    return "\n".join(prompt_lines)
 
 def get_chatgpt_prediction(prompt):
     """Call the OpenAI API to get a prediction."""
@@ -42,14 +67,11 @@ def main():
     if not openai.api_key:
         raise ValueError("Please set your OPENAI_API_KEY environment variable.")
     
-    # Load sample JSON data. Adjust path if needed.
+    # Load the JSON data. Adjust path if needed.
     data = load_data("sample_data.json")
     
-    # Use the first student's data as an example.
-    student = data["students"][0]
-    
-    # Construct the prompt.
-    prompt = construct_prompt(student)
+    # Construct the prompt using the new format.
+    prompt = construct_prompt(data)
     
     # Get the prediction from ChatGPT.
     prediction = get_chatgpt_prediction(prompt)
@@ -65,4 +87,4 @@ def main():
         print(prediction)
 
 if __name__ == "__main__":
-    main()
+    main()  
