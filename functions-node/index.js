@@ -178,7 +178,70 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
     const userId = context.auth.uid;
     console.log(`Starting grade prediction for user ${userId}`);
     
-    // Get all documents for the user
+    // Check if this is a document upload request
+    if (data.documentBase64 && data.documentType) {
+      console.log(`Processing document upload for type: ${data.documentType}`);
+      
+      // Convert base64 to buffer
+      const base64Data = data.documentBase64.replace(/^data:application\/pdf;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      // Create a temporary file
+      const tempFile = tmp.fileSync({ postfix: '.pdf' });
+      fs.writeFileSync(tempFile.name, buffer);
+      
+      // Upload to Firebase Storage
+      const bucket = admin.storage().bucket('gradingai.appspot.com');
+      const filePath = `users/${userId}/${data.documentType}/${Date.now()}.pdf`;
+      
+      await bucket.upload(tempFile.name, {
+        destination: filePath,
+        metadata: {
+          contentType: 'application/pdf',
+          metadata: {
+            documentType: data.documentType,
+            uploadedBy: userId
+          }
+        }
+      });
+      
+      // Store document info in Firestore
+      const db = admin.firestore();
+      const docRef = db.collection('users').doc(userId).collection('documents').doc(data.documentType);
+      
+      await docRef.set({
+        filePath: filePath,
+        uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'uploaded'
+      });
+      
+      // Clean up temp file
+      tempFile.removeCallback();
+      
+      // Extract text from the uploaded PDF
+      const extractedText = await extractTextFromPdf(userId, data.documentType, filePath);
+      
+      // Process the extracted text and generate prediction
+      const docs = { [data.documentType]: extractedText };
+      const structuredData = await processExtractedText(docs);
+      const prediction = await generatePrediction(structuredData);
+      
+      // Store prediction in Firestore
+      const predictionRef = db.collection('users').doc(userId).collection('predictions').doc();
+      await predictionRef.set({
+        prediction: prediction,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        documents: [data.documentType]
+      });
+      
+      return {
+        success: true,
+        message: `Document uploaded and processed successfully`,
+        prediction: prediction
+      };
+    }
+    
+    // If no document upload, proceed with prediction based on existing documents
     const db = admin.firestore();
     const docs = {};
     
@@ -196,17 +259,10 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
         
         const text = docData.text || "";
         
-        // If text is not extracted yet, skip this document
-        if (!text && docData.filePath) {
-          console.log(`Text not found for ${docType}, skipping`);
-        }
-        
         if (text) {
           docs[docType] = text;
           console.log(`Found ${text.length} characters of text for ${docType}`);
         }
-      } else {
-        console.log(`${docType} document not found`);
       }
     }
     

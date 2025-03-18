@@ -24,14 +24,23 @@ const Dashboard: React.FC = () => {
 
     try {
       const functions = getFunctions();
-      // Use the simplified prediction function
-      const predictGrade = httpsCallable(functions, 'simple_predict_grade');
+      // Use the predictGrades function
+      const predictGrades = httpsCallable(functions, 'predictGrades');
       
-      const result = await predictGrade({});
+      const result = await predictGrades({});
       const data = result.data as any;
       
       if (data.success && data.prediction) {
-        setPredictionResult(data.prediction);
+        setPredictionResult({
+          predictedGrade: data.prediction.grade,
+          confidence: 0.85, // Default confidence level
+          factors: [
+            "Previous academic performance",
+            "Course difficulty level",
+            "Assignment completion rate",
+            "Engagement with course materials"
+          ]
+        });
       } else {
         setError(data.message || 'Failed to generate prediction');
       }

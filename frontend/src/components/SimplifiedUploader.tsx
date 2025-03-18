@@ -46,9 +46,9 @@ const SimplifiedUploader: React.FC = () => {
         const base64String = fileReader.result as string;
         
         try {
-          // Call upload_and_process_document cloud function
-          const uploadAndProcessDocument = httpsCallable(functions, 'upload_and_process_document');
-          const result = await uploadAndProcessDocument({
+          // Use predictGrades function for both upload and prediction
+          const predictGrades = httpsCallable(functions, 'predictGrades');
+          const result = await predictGrades({
             documentType: documentType,
             documentBase64: base64String
           });
@@ -57,16 +57,15 @@ const SimplifiedUploader: React.FC = () => {
           
           if (data.success) {
             setStatus('Document uploaded successfully. Processing...');
-            setTimeout(() => {
-              // For demo purposes, show a simulated prediction after upload
-              // In production, we would poll for document status and then call predict_final_grade
+            
+            if (data.prediction) {
               setPrediction({
-                grade: 88.5,
-                reasoning: "Based on your academic history and the course syllabus, you're predicted to perform well in this class. Your consistent work and GPA suggest you're well-positioned to manage the assignments and exams effectively."
+                grade: data.prediction.grade,
+                reasoning: data.prediction.reasoning
               });
-              setStatus('');
-              setIsUploading(false);
-            }, 3000);
+            }
+            setStatus('');
+            setIsUploading(false);
           } else {
             setError('Upload failed: ' + (data.message || 'Unknown error'));
             setStatus('');

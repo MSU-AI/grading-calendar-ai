@@ -19,6 +19,19 @@ service cloud.firestore {
       allow create: if false;
       // Only allow deletion through Cloud Functions
       allow delete: if false;
+      
+      // Add rules for documents subcollection
+      match /documents/{documentType} {
+        allow read: if isOwner(userId);
+        // Allow Cloud Functions to write to this collection
+        allow write: if false;
+      }
+      
+      // Add rules for predictions subcollection
+      match /predictions/{predictionId} {
+        allow read: if isOwner(userId);
+        allow write: if false;
+      }
     }
     
     // Courses collection - will be implemented later
