@@ -24,7 +24,8 @@ const Dashboard: React.FC = () => {
 
     try {
       const functions = getFunctions();
-      const predictGrade = httpsCallable(functions, 'predict_grade');
+      // Use the simplified prediction function
+      const predictGrade = httpsCallable(functions, 'simple_predict_grade');
       
       const result = await predictGrade({});
       const data = result.data as any;
@@ -32,7 +33,7 @@ const Dashboard: React.FC = () => {
       if (data.success && data.prediction) {
         setPredictionResult(data.prediction);
       } else {
-        setError('Failed to generate prediction');
+        setError(data.message || 'Failed to generate prediction');
       }
     } catch (error: any) {
       console.error('Prediction error:', error);

@@ -1,7 +1,7 @@
 firebase_functions~=0.1.0
-firebase_admin
-google-cloud-firestore
-google-cloud-vision>=3.4.0
-google-cloud-storage>=2.10.0
-openai
-python-dotenv
+firebase_admin>=5.2.0
+google-cloud-firestore>=2.6.0
+google-cloud-vision>=3.1.0
+google-cloud-storage>=2.5.0
+openai>=1.0.0
+python-dotenv>=1.0.0
