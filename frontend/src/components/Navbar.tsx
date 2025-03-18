@@ -1,9 +1,8 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import SimplifiedUploader from './SimplifiedUploader';
 
-const Dashboard: React.FC = () => {
+const Navbar: React.FC = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -17,47 +16,54 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h2 style={styles.welcomeText}>Welcome, {currentUser?.displayName || currentUser?.email}</h2>
-        <button onClick={handleLogout} style={styles.logoutButton}>
-          Logout
-        </button>
+    <div style={styles.navbar}>
+      <div style={styles.logo}>
+        Academic Performance Predictor
       </div>
-      
-      <SimplifiedUploader />
+      {currentUser && (
+        <div style={styles.userSection}>
+          <span style={styles.userEmail}>{currentUser.email}</span>
+          <button onClick={handleLogout} style={styles.logoutButton}>
+            Logout
+          </button>
+        </div>
+      )}
     </div>
   );
 };
 
 const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    minHeight: '100vh',
-    backgroundColor: '#f5f5f5',
-  },
-  header: {
+  navbar: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '1rem 2rem',
     backgroundColor: '#2196F3',
     color: 'white',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
   },
-  welcomeText: {
-    margin: 0,
+  logo: {
     fontSize: '1.2rem',
+    fontWeight: 'bold' as const,
+  },
+  userSection: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+  },
+  userEmail: {
+    fontSize: '0.9rem',
   },
   logoutButton: {
-    padding: '0.5rem 1rem',
+    padding: '0.4rem 0.8rem',
     backgroundColor: 'white',
     color: '#2196F3',
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
     fontWeight: 'bold' as const,
+    fontSize: '0.8rem',
   },
 };
 
-export default Dashboard;
+export default Navbar;
