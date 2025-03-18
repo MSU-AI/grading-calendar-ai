@@ -9,12 +9,29 @@ from auth import (
 from ocr import (
     extract_text_from_pdf,
     process_syllabus,
-    process_transcript
+    process_transcript,
+    process_uploaded_pdf
 )
 from openai_api import (
     analyze_grades,
     predict_final_grade,
     extract_assignments
+)
+from storage import (
+    get_upload_url
+)
+from ml_predict import (
+    predict_with_linear_regression,
+    add_training_data
+)
+from combined_predict import (
+    get_combined_prediction,
+    get_latest_predictions
+)
+from document_processing import (
+    upload_and_process_document,
+    get_document_status,
+    get_user_documents
 )
 
 # Initialize Firebase app
@@ -31,8 +48,21 @@ __all__ = [
     'extract_text_from_pdf',
     'process_syllabus',
     'process_transcript',
+    'process_uploaded_pdf',
     # OpenAI API functions
     'analyze_grades',
     'predict_final_grade',
-    'extract_assignments'
+    'extract_assignments',
+    # Storage functions
+    'get_upload_url',
+    # ML prediction functions
+    'predict_with_linear_regression',
+    'add_training_data',
+    # Combined prediction functions
+    'get_combined_prediction',
+    'get_latest_predictions',
+    # Document processing functions
+    'upload_and_process_document',
+    'get_document_status',
+    'get_user_documents'
 ]
