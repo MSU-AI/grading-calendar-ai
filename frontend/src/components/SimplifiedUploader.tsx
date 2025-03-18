@@ -7,6 +7,15 @@ interface Prediction {
   reasoning: string;
 }
 
+interface PredictionResponse {
+  success: boolean;
+  prediction?: {
+    grade: number | string;
+    reasoning: string;
+  };
+  message?: string;
+}
+
 const SimplifiedUploader: React.FC = () => {
   const { currentUser } = useAuth();
   const [file, setFile] = useState<File | null>(null);
@@ -46,9 +55,9 @@ const SimplifiedUploader: React.FC = () => {
         const base64String = fileReader.result as string;
         
         try {
-          // Use predictGrades function for both upload and prediction
-          const predictGrades = httpsCallable(functions, 'predictGrades');
-          const result = await predictGrades({
+          // Use dedicated upload function
+          const uploadDocument = httpsCallable(functions, 'uploadDocument');
+          const result = await uploadDocument({
             documentType: documentType,
             documentBase64: base64String
           });
@@ -56,14 +65,24 @@ const SimplifiedUploader: React.FC = () => {
           const data = result.data as any;
           
           if (data.success) {
-            setStatus('Document uploaded successfully. Processing...');
+            setStatus('Document uploaded successfully.');
             
-            if (data.prediction) {
-              setPrediction({
-                grade: data.prediction.grade,
-                reasoning: data.prediction.reasoning
-              });
+            // After successful upload, call predictGrades
+            try {
+              const predictGrades = httpsCallable(functions, 'predictGrades');
+              const predictionResult = await predictGrades({}) as { data: PredictionResponse };
+              
+              if (predictionResult.data.success && predictionResult.data.prediction) {
+                setPrediction({
+                  grade: predictionResult.data.prediction.grade,
+                  reasoning: predictionResult.data.prediction.reasoning || 'No reasoning provided'
+                });
+              }
+            } catch (predictionError: any) {
+              console.error('Prediction error:', predictionError);
+              // Don't show prediction errors to user, just log them
             }
+            
             setStatus('');
             setIsUploading(false);
           } else {

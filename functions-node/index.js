@@ -8,6 +8,85 @@ const OpenAI = require('openai');
 // Initialize Firebase Admin
 admin.initializeApp();
 
+/**
+ * Dedicated function for handling PDF document uploads
+ */
+exports.uploadDocument = functions.https.onCall(async (data, context) => {
+  try {
+    console.log('uploadDocument called with document type:', data.documentType);
+    
+    // Ensure user is authenticated
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const userId = context.auth.uid;
+    
+    // Validate input
+    if (!data.documentBase64 || !data.documentType) {
+      throw new functions.https.HttpsError('invalid-argument', 'Missing document data or type');
+    }
+    
+    // Process base64 data - handle different formats of base64 strings
+    let base64Data = data.documentBase64;
+    if (base64Data.includes('base64,')) {
+      base64Data = base64Data.split('base64,')[1];
+    }
+    
+    // Create buffer from base64
+    const buffer = Buffer.from(base64Data, 'base64');
+    console.log(`Created buffer with ${buffer.length} bytes`);
+    
+    // Create temp file
+    const tempFile = tmp.fileSync({ postfix: '.pdf' });
+    fs.writeFileSync(tempFile.name, buffer);
+    console.log(`Wrote buffer to temp file: ${tempFile.name}`);
+    
+    try {
+      // Get default bucket
+      const bucket = admin.storage().bucket();
+      const filePath = `users/${userId}/${data.documentType}/${Date.now()}.pdf`;
+      
+      console.log(`Uploading to Firebase Storage: ${filePath}`);
+      await bucket.upload(tempFile.name, {
+        destination: filePath,
+        metadata: {
+          contentType: 'application/pdf'
+        }
+      });
+      
+      console.log(`Successfully uploaded to ${filePath}`);
+      
+      // Store reference in Firestore
+      const db = admin.firestore();
+      const docRef = db.collection('users').doc(userId).collection('documents').doc(data.documentType);
+      
+      await docRef.set({
+        filePath: filePath,
+        uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'uploaded'
+      });
+      
+      console.log(`Firestore document updated for ${filePath}`);
+      
+      return {
+        success: true,
+        message: 'Document uploaded successfully',
+        filePath: filePath
+      };
+    } catch (uploadError) {
+      console.error('Error during upload:', uploadError);
+      throw new functions.https.HttpsError('internal', `Storage upload failed: ${uploadError.message}`);
+    } finally {
+      // Clean up temp file
+      tempFile.removeCallback();
+    }
+  } catch (error) {
+    console.error('Error in uploadDocument:', error);
+    throw new functions.https.HttpsError('internal', `Upload failed: ${error.message}`);
+  }
+});
+
 // Get OpenAI API key from Firebase configuration or environment variable
 function getOpenAIApiKey() {
   const apiKey = process.env.OPENAI_API_KEY || 
@@ -191,7 +270,7 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
       fs.writeFileSync(tempFile.name, buffer);
       
       // Upload to Firebase Storage
-      const bucket = admin.storage().bucket('gradingai.appspot.com');
+      const bucket = admin.storage().bucket();
       const filePath = `users/${userId}/${data.documentType}/${Date.now()}.pdf`;
       
       await bucket.upload(tempFile.name, {
@@ -320,7 +399,7 @@ async function extractTextFromPdf(userId, documentType, filePath) {
   console.log(`Extracting text from ${documentType} PDF: ${filePath} for user ${userId}`);
   
   // Get a reference to the default bucket
-  const bucket = admin.storage().bucket('gradingai.appspot.com');
+  const bucket = admin.storage().bucket();
   console.log(`Using bucket: ${bucket.name}`);
   
   let tempFile = null;
