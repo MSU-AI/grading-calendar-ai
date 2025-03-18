@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
@@ -26,24 +26,25 @@ const PredictionPanel: React.FC = () => {
   const functions = getFunctions();
   const db = getFirestore();
 
+  // Memoize fetchDocuments with useCallback
+  const fetchDocuments = useCallback(async () => {
+    try {
+      const getUserDocuments = httpsCallable(functions, 'getUserDocuments');
+      const result = await getUserDocuments();
+      
+      if ((result.data as any).success) {
+        setDocuments((result.data as any).documents || []);
+      }
+    } catch (err) {
+      console.error('Error fetching documents:', err);
+    }
+  }, [functions]);
+
   // Listen for documents and predictions
   useEffect(() => {
     if (!currentUser) return;
 
-    // Fetch user documents
-    const fetchDocuments = async () => {
-      try {
-        const getUserDocuments = httpsCallable(functions, 'getUserDocuments');
-        const result = await getUserDocuments();
-        
-        if ((result.data as any).success) {
-          setDocuments((result.data as any).documents || []);
-        }
-      } catch (err) {
-        console.error('Error fetching documents:', err);
-      }
-    };
-
+    // Fetch documents initially
     fetchDocuments();
 
     // Listen for the latest prediction
@@ -61,7 +62,7 @@ const PredictionPanel: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [currentUser, functions, db]);
+  }, [currentUser, db, fetchDocuments]);
 
   const handlePredict = async () => {
     // Check if we have enough documents

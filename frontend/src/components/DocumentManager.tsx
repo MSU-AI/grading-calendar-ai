@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -21,14 +21,8 @@ const DocumentManager: React.FC = () => {
   
   const functions = getFunctions();
 
-  // Fetch existing documents on component mount
-  useEffect(() => {
-    if (!currentUser) return;
-    
-    fetchUserDocuments();
-  }, [currentUser]);
-
-  const fetchUserDocuments = async () => {
+  // Memoize fetchUserDocuments with useCallback
+  const fetchUserDocuments = useCallback(async () => {
     try {
       const getUserDocuments = httpsCallable(functions, 'getUserDocuments');
       const result = await getUserDocuments();
@@ -40,7 +34,14 @@ const DocumentManager: React.FC = () => {
       console.error('Error fetching documents:', err);
       setError('Failed to load existing documents');
     }
-  };
+  }, [functions, setError]);
+
+  // Fetch existing documents on component mount
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    fetchUserDocuments();
+  }, [currentUser, fetchUserDocuments]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
