@@ -5,17 +5,6 @@
   },
   "functions": [
     {
-      "source": "functions",
-      "codebase": "python",
-      "ignore": [
-        "venv",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ]
-    },
-    {
       "source": "functions-node",
       "codebase": "nodejs",
       "ignore": [
