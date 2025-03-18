@@ -1,11 +1,46 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import SimplifiedUploader from './SimplifiedUploader';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
+interface PredictionResult {
+  predictedGrade: string;
+  confidence: number;
+  factors: string[];
+}
 
 const Dashboard: React.FC = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
+  const [isPredicting, setIsPredicting] = useState(false);
+  const [predictionResult, setPredictionResult] = useState<PredictionResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handlePredict = async () => {
+    setIsPredicting(true);
+    setError(null);
+    setPredictionResult(null);
+
+    try {
+      const functions = getFunctions();
+      const predictGrade = httpsCallable(functions, 'predict_grade');
+      
+      const result = await predictGrade({});
+      const data = result.data as any;
+      
+      if (data.success && data.prediction) {
+        setPredictionResult(data.prediction);
+      } else {
+        setError('Failed to generate prediction');
+      }
+    } catch (error: any) {
+      console.error('Prediction error:', error);
+      setError(error.message || 'An error occurred during prediction');
+    } finally {
+      setIsPredicting(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -26,6 +61,38 @@ const Dashboard: React.FC = () => {
       </div>
       
       <SimplifiedUploader />
+
+      <div style={styles.predictionSection}>
+        <button 
+          onClick={handlePredict} 
+          disabled={isPredicting}
+          style={styles.predictButton}
+        >
+          {isPredicting ? 'Generating Prediction...' : 'Predict Grade'}
+        </button>
+
+        {error && (
+          <div style={styles.error}>
+            {error}
+          </div>
+        )}
+
+        {predictionResult && (
+          <div style={styles.predictionResult}>
+            <h3>Prediction Result</h3>
+            <p style={styles.grade}>Predicted Grade: {predictionResult.predictedGrade}</p>
+            <p>Confidence: {(predictionResult.confidence * 100).toFixed(1)}%</p>
+            <div style={styles.factors}>
+              <h4>Contributing Factors:</h4>
+              <ul>
+                {predictionResult.factors.map((factor, index) => (
+                  <li key={index}>{factor}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -57,6 +124,57 @@ const styles = {
     borderRadius: '4px',
     cursor: 'pointer',
     fontWeight: 'bold' as const,
+  },
+  predictionSection: {
+    padding: '2rem',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    gap: '1rem',
+  },
+  predictButton: {
+    padding: '1rem 2rem',
+    backgroundColor: '#4CAF50',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '1.1rem',
+    fontWeight: 'bold' as const,
+    transition: 'background-color 0.2s',
+    ':hover': {
+      backgroundColor: '#45a049',
+    },
+    ':disabled': {
+      backgroundColor: '#cccccc',
+      cursor: 'not-allowed',
+    },
+  },
+  error: {
+    color: '#f44336',
+    padding: '1rem',
+    backgroundColor: '#ffebee',
+    borderRadius: '4px',
+    width: '100%',
+    maxWidth: '600px',
+    textAlign: 'center' as const,
+  },
+  predictionResult: {
+    backgroundColor: 'white',
+    padding: '2rem',
+    borderRadius: '8px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    width: '100%',
+    maxWidth: '600px',
+  },
+  grade: {
+    fontSize: '1.5rem',
+    fontWeight: 'bold' as const,
+    color: '#2196F3',
+    marginBottom: '1rem',
+  },
+  factors: {
+    marginTop: '1rem',
   },
 };
 
