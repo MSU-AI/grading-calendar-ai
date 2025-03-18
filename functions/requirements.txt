@@ -1,6 +1,7 @@
 firebase_functions~=0.1.0
 firebase_admin
 google-cloud-firestore
+google-cloud-vision>=3.4.0
+google-cloud-storage>=2.10.0
 openai
 python-dotenv
-pikepdf>=8.11.1
