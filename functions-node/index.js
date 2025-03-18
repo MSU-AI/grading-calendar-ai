@@ -26,6 +26,9 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
     if (!data.documentBase64 || !data.documentType) {
       throw new functions.https.HttpsError('invalid-argument', 'Missing document data or type');
     }
+
+    // Get document name or generate one
+    const documentName = data.documentName || `${data.documentType}_${Date.now()}.pdf`;
     
     // Process base64 data - handle different formats of base64 strings
     let base64Data = data.documentBase64;
@@ -57,12 +60,14 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
       
       console.log(`Successfully uploaded to ${filePath}`);
       
-      // Store reference in Firestore
+      // Store reference in Firestore with auto-generated ID
       const db = admin.firestore();
-      const docRef = db.collection('users').doc(userId).collection('documents').doc(data.documentType);
+      const docRef = db.collection('users').doc(userId).collection('documents').doc();
       
       await docRef.set({
         filePath: filePath,
+        documentType: data.documentType,
+        name: documentName,
         uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
         status: 'uploaded'
       });
@@ -84,6 +89,88 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
   } catch (error) {
     console.error('Error in uploadDocument:', error);
     throw new functions.https.HttpsError('internal', `Upload failed: ${error.message}`);
+  }
+});
+
+/**
+ * Fetch all documents for a user
+ */
+exports.getUserDocuments = functions.https.onCall(async (data, context) => {
+  try {
+    // Ensure user is authenticated
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const userId = context.auth.uid;
+    
+    // Get documents from Firestore
+    const db = admin.firestore();
+    const documentsRef = db.collection('users').doc(userId).collection('documents');
+    const snapshot = await documentsRef.get();
+    
+    const documents = [];
+    snapshot.forEach(doc => {
+      documents.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    return {
+      success: true,
+      documents: documents
+    };
+  } catch (error) {
+    console.error('Error getting user documents:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+/**
+ * Delete a specific document
+ */
+exports.deleteDocument = functions.https.onCall(async (data, context) => {
+  try {
+    // Ensure user is authenticated
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const userId = context.auth.uid;
+    const { documentId } = data;
+    
+    if (!documentId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Document ID is required');
+    }
+    
+    // Get document info
+    const db = admin.firestore();
+    const docRef = db.collection('users').doc(userId).collection('documents').doc(documentId);
+    const doc = await docRef.get();
+    
+    if (!doc.exists) {
+      throw new functions.https.HttpsError('not-found', 'Document not found');
+    }
+    
+    const docData = doc.data();
+    
+    // Delete from Firestore
+    await docRef.delete();
+    
+    // Delete from Storage if filePath exists
+    if (docData.filePath) {
+      const bucket = admin.storage().bucket();
+      await bucket.file(docData.filePath).delete();
+    }
+    
+    return {
+      success: true,
+      message: 'Document deleted successfully'
+    };
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    throw new functions.https.HttpsError('internal', error.message);
   }
 });
 
@@ -129,12 +216,14 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
     
     console.log(`Processing uploaded PDF: ${filePath} for user: ${userId}, type: ${documentType}`);
     
-    // Store basic information in Firestore
+    // Store basic information in Firestore with auto-generated ID
     const db = admin.firestore();
-    const docRef = db.collection('users').doc(userId).collection('documents').doc(documentType);
+    const docRef = db.collection('users').doc(userId).collection('documents').doc();
     
     await docRef.set({
       filePath: filePath,
+      documentType: documentType,
+      name: pathParts[3], // Use the filename from the path
       uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
       status: 'uploaded'
     });
@@ -144,7 +233,7 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
     // Automatically extract text from the PDF
     try {
       console.log(`Starting automatic text extraction for ${filePath}`);
-      await extractTextFromPdf(userId, documentType, filePath);
+      await extractTextFromPdf(userId, docRef.id, filePath);
       console.log(`Automatic text extraction completed for ${filePath}`);
     } catch (extractError) {
       console.error(`Error automatically extracting text: ${extractError}`);
@@ -178,53 +267,39 @@ exports.extractPdfText = functions.https.onCall(async (data, context) => {
     }
     
     const userId = context.auth.uid;
-    const { documentType } = data;
+    const { documentId } = data;
     
-    console.log(`extractPdfText for user: ${userId}, documentType: ${documentType}`);
-    
-    if (!documentType || !['syllabus', 'transcript', 'grades'].includes(documentType)) {
-      console.error(`Invalid document type: ${documentType}`);
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'Valid document type (syllabus, transcript, or grades) is required'
-      );
+    if (!documentId) {
+      throw new functions.https.HttpsError('invalid-argument', 'Document ID is required');
     }
     
     // Get document info from Firestore
     const db = admin.firestore();
-    const docRef = db.collection('users').doc(userId).collection('documents').doc(documentType);
+    const docRef = db.collection('users').doc(userId).collection('documents').doc(documentId);
     const doc = await docRef.get();
     
     if (!doc.exists) {
-      console.error(`Document not found: users/${userId}/documents/${documentType}`);
-      throw new functions.https.HttpsError(
-        'not-found',
-        `${documentType} not found`
-      );
+      throw new functions.https.HttpsError('not-found', 'Document not found');
     }
     
     const docData = doc.data();
     const filePath = docData.filePath;
     
     if (!filePath) {
-      console.error(`File path not found for ${documentType}`);
-      throw new functions.https.HttpsError(
-        'not-found',
-        `File path not found for ${documentType}`
-      );
+      throw new functions.https.HttpsError('not-found', 'File path not found for document');
     }
     
     console.log(`Starting text extraction for ${filePath}`);
     
     // Extract text from the PDF
-    const extractedText = await extractTextFromPdf(userId, documentType, filePath);
+    const extractedText = await extractTextFromPdf(userId, documentId, filePath);
     
     console.log(`Text extraction successful, ${extractedText.length} characters extracted`);
     
     return {
       success: true,
-      documentType,
-      message: `Successfully extracted text from ${documentType}`,
+      documentId,
+      message: `Successfully extracted text from document`,
       textLength: extractedText.length
     };
   } catch (error) {
@@ -257,99 +332,27 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
     const userId = context.auth.uid;
     console.log(`Starting grade prediction for user ${userId}`);
     
-    // Check if this is a document upload request
-    if (data.documentBase64 && data.documentType) {
-      console.log(`Processing document upload for type: ${data.documentType}`);
-      
-      // Convert base64 to buffer
-      const base64Data = data.documentBase64.replace(/^data:application\/pdf;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      
-      // Create a temporary file
-      const tempFile = tmp.fileSync({ postfix: '.pdf' });
-      fs.writeFileSync(tempFile.name, buffer);
-      
-      // Upload to Firebase Storage
-      const bucket = admin.storage().bucket();
-      const filePath = `users/${userId}/${data.documentType}/${Date.now()}.pdf`;
-      
-      await bucket.upload(tempFile.name, {
-        destination: filePath,
-        metadata: {
-          contentType: 'application/pdf',
-          metadata: {
-            documentType: data.documentType,
-            uploadedBy: userId
-          }
-        }
-      });
-      
-      // Store document info in Firestore
-      const db = admin.firestore();
-      const docRef = db.collection('users').doc(userId).collection('documents').doc(data.documentType);
-      
-      await docRef.set({
-        filePath: filePath,
-        uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
-        status: 'uploaded'
-      });
-      
-      // Clean up temp file
-      tempFile.removeCallback();
-      
-      // Extract text from the uploaded PDF
-      const extractedText = await extractTextFromPdf(userId, data.documentType, filePath);
-      
-      // Process the extracted text and generate prediction
-      const docs = { [data.documentType]: extractedText };
-      const structuredData = await processExtractedText(docs);
-      const prediction = await generatePrediction(structuredData);
-      
-      // Store prediction in Firestore
-      const predictionRef = db.collection('users').doc(userId).collection('predictions').doc();
-      await predictionRef.set({
-        prediction: prediction,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        documents: [data.documentType]
-      });
-      
-      return {
-        success: true,
-        message: `Document uploaded and processed successfully`,
-        prediction: prediction
-      };
-    }
-    
-    // If no document upload, proceed with prediction based on existing documents
+    // Get all processed documents
     const db = admin.firestore();
-    const docs = {};
+    const documentsRef = db.collection('users').doc(userId).collection('documents');
+    const snapshot = await documentsRef.where('status', '==', 'processed').get();
     
-    // Try to get syllabus, transcript, and grades
-    const docTypes = ["syllabus", "transcript", "grades"];
-    for (const docType of docTypes) {
-      console.log(`Checking for ${docType} document`);
-      
-      const docRef = db.collection('users').doc(userId).collection('documents').doc(docType);
-      const doc = await docRef.get();
-      
-      if (doc.exists) {
-        const docData = doc.data();
-        console.log(`Found ${docType} document: ${JSON.stringify(docData)}`);
-        
-        const text = docData.text || "";
-        
-        if (text) {
-          docs[docType] = text;
-          console.log(`Found ${text.length} characters of text for ${docType}`);
-        }
+    const docs = {};
+    const documentIds = [];
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.text) {
+        docs[data.documentType] = data.text;
+        documentIds.push(doc.id);
       }
-    }
+    });
     
     if (Object.keys(docs).length === 0) {
-      console.log("No document text found for prediction");
+      console.log("No processed documents found for prediction");
       return {
         success: false,
-        message: "No document text found. Please upload at least a syllabus or transcript."
+        message: "No processed documents found. Please upload and process at least one document."
       };
     }
     
@@ -368,7 +371,7 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
     const predictionData = {
       prediction: prediction,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      documents: Object.keys(docs)
+      documentIds: documentIds
     };
     
     console.log("Storing prediction in Firestore");
@@ -395,8 +398,8 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
 /**
  * Helper function to extract text from a PDF
  */
-async function extractTextFromPdf(userId, documentType, filePath) {
-  console.log(`Extracting text from ${documentType} PDF: ${filePath} for user ${userId}`);
+async function extractTextFromPdf(userId, documentId, filePath) {
+  console.log(`Extracting text from PDF: ${filePath} for user ${userId}, document ${documentId}`);
   
   // Get a reference to the default bucket
   const bucket = admin.storage().bucket();
@@ -432,7 +435,7 @@ async function extractTextFromPdf(userId, documentType, filePath) {
     
     // Update document in Firestore with extracted text
     const db = admin.firestore();
-    const docRef = db.collection('users').doc(userId).collection('documents').doc(documentType);
+    const docRef = db.collection('users').doc(userId).collection('documents').doc(documentId);
     
     // Use set with merge to ensure we don't overwrite existing data
     console.log(`Updating Firestore document with extracted text`);

@@ -1,56 +1,15 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import DocumentManager from './DocumentManager';
+import PredictionPanel from './PredictionPanel';
 import SimplifiedUploader from './SimplifiedUploader';
-import { getFunctions, httpsCallable } from 'firebase/functions';
-
-interface PredictionResult {
-  predictedGrade: string;
-  confidence: number;
-  factors: string[];
-}
 
 const Dashboard: React.FC = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
-  const [isPredicting, setIsPredicting] = useState(false);
-  const [predictionResult, setPredictionResult] = useState<PredictionResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const handlePredict = async () => {
-    setIsPredicting(true);
-    setError(null);
-    setPredictionResult(null);
-
-    try {
-      const functions = getFunctions();
-      // Use the predictGrades function
-      const predictGrades = httpsCallable(functions, 'predictGrades');
-      
-      const result = await predictGrades({});
-      const data = result.data as any;
-      
-      if (data.success && data.prediction) {
-        setPredictionResult({
-          predictedGrade: data.prediction.grade,
-          confidence: 0.85, // Default confidence level
-          factors: [
-            "Previous academic performance",
-            "Course difficulty level",
-            "Assignment completion rate",
-            "Engagement with course materials"
-          ]
-        });
-      } else {
-        setError(data.message || 'Failed to generate prediction');
-      }
-    } catch (error: any) {
-      console.error('Prediction error:', error);
-      setError(error.message || 'An error occurred during prediction');
-    } finally {
-      setIsPredicting(false);
-    }
-  };
+  const [activeTab, setActiveTab] = useState<string>('documents');
+  const [useNewComponents, setUseNewComponents] = useState<boolean>(true);
 
   const handleLogout = async () => {
     try {
@@ -64,44 +23,64 @@ const Dashboard: React.FC = () => {
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <h2 style={styles.welcomeText}>Welcome, {currentUser?.displayName || currentUser?.email}</h2>
-        <button onClick={handleLogout} style={styles.logoutButton}>
-          Logout
-        </button>
+        <h1 style={styles.title}>Academic Performance Predictor</h1>
+        <div style={styles.userInfo}>
+          <span style={styles.userEmail}>{currentUser?.email}</span>
+          <button onClick={handleLogout} style={styles.logoutButton}>
+            Logout
+          </button>
+        </div>
       </div>
       
-      <SimplifiedUploader />
-
-      <div style={styles.predictionSection}>
-        <button 
-          onClick={handlePredict} 
-          disabled={isPredicting}
-          style={styles.predictButton}
-        >
-          {isPredicting ? 'Generating Prediction...' : 'Predict Grade'}
-        </button>
-
-        {error && (
-          <div style={styles.error}>
-            {error}
+      {useNewComponents ? (
+        <>
+          <div style={styles.tabs}>
+            <button 
+              style={activeTab === 'documents' ? styles.activeTab : styles.tab}
+              onClick={() => setActiveTab('documents')}
+            >
+              Document Manager
+            </button>
+            <button 
+              style={activeTab === 'prediction' ? styles.activeTab : styles.tab}
+              onClick={() => setActiveTab('prediction')}
+            >
+              Grade Prediction
+            </button>
           </div>
-        )}
-
-        {predictionResult && (
-          <div style={styles.predictionResult}>
-            <h3>Prediction Result</h3>
-            <p style={styles.grade}>Predicted Grade: {predictionResult.predictedGrade}</p>
-            <p>Confidence: {(predictionResult.confidence * 100).toFixed(1)}%</p>
-            <div style={styles.factors}>
-              <h4>Contributing Factors:</h4>
-              <ul>
-                {predictionResult.factors.map((factor, index) => (
-                  <li key={index}>{factor}</li>
-                ))}
-              </ul>
-            </div>
+          
+          <div style={styles.content}>
+            {activeTab === 'documents' && <DocumentManager />}
+            {activeTab === 'prediction' && <PredictionPanel />}
           </div>
-        )}
+          
+          {/* Fallback toggle for testing - remove in production */}
+          <div style={styles.fallbackToggle}>
+            <button 
+              onClick={() => setUseNewComponents(false)}
+              style={styles.fallbackButton}
+            >
+              Switch to Legacy Mode
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <SimplifiedUploader />
+          <div style={styles.fallbackToggle}>
+            <button 
+              onClick={() => setUseNewComponents(true)}
+              style={styles.fallbackButton}
+            >
+              Switch to New Interface
+            </button>
+          </div>
+        </>
+      )}
+      
+      <div style={styles.footer}>
+        <p>Upload your academic documents and get a prediction of your final grade.</p>
+        <p><strong>How it works:</strong> First upload your documents in the Document Manager tab, then switch to the Grade Prediction tab to get your prediction.</p>
       </div>
     </div>
   );
@@ -109,82 +88,91 @@ const Dashboard: React.FC = () => {
 
 const styles = {
   container: {
+    maxWidth: '1200px',
+    margin: '0 auto',
+    padding: '20px',
+    minHeight: 'calc(100vh - 40px)',
     display: 'flex',
     flexDirection: 'column' as const,
-    minHeight: '100vh',
-    backgroundColor: '#f5f5f5',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: '1rem 2rem',
-    backgroundColor: '#2196F3',
-    color: 'white',
+    marginBottom: '20px',
+    paddingBottom: '10px',
+    borderBottom: '1px solid #eee',
   },
-  welcomeText: {
+  title: {
     margin: 0,
-    fontSize: '1.2rem',
+    color: '#2196F3',
+    fontSize: '28px',
+  },
+  userInfo: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '15px',
+  },
+  userEmail: {
+    color: '#666',
   },
   logoutButton: {
-    padding: '0.5rem 1rem',
-    backgroundColor: 'white',
-    color: '#2196F3',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontWeight: 'bold' as const,
-  },
-  predictionSection: {
-    padding: '2rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: '1rem',
-  },
-  predictButton: {
-    padding: '1rem 2rem',
-    backgroundColor: '#4CAF50',
+    padding: '8px 16px',
+    backgroundColor: '#f44336',
     color: 'white',
     border: 'none',
     borderRadius: '4px',
     cursor: 'pointer',
-    fontSize: '1.1rem',
-    fontWeight: 'bold' as const,
-    transition: 'background-color 0.2s',
-    ':hover': {
-      backgroundColor: '#45a049',
-    },
-    ':disabled': {
-      backgroundColor: '#cccccc',
-      cursor: 'not-allowed',
-    },
+    fontWeight: 'bold',
   },
-  error: {
-    color: '#f44336',
-    padding: '1rem',
-    backgroundColor: '#ffebee',
-    borderRadius: '4px',
-    width: '100%',
-    maxWidth: '600px',
+  tabs: {
+    display: 'flex',
+    marginBottom: '20px',
+    borderBottom: '1px solid #eee',
+  },
+  tab: {
+    padding: '12px 24px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderBottom: '3px solid transparent',
+    cursor: 'pointer',
+    fontSize: '16px',
+    color: '#666',
+    fontWeight: 'bold',
+  },
+  activeTab: {
+    padding: '12px 24px',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderBottom: '3px solid #2196F3',
+    cursor: 'pointer',
+    fontSize: '16px',
+    color: '#2196F3',
+    fontWeight: 'bold',
+  },
+  content: {
+    flex: 1,
+  },
+  footer: {
+    marginTop: '40px',
+    padding: '20px',
+    backgroundColor: '#f9f9f9',
+    borderRadius: '8px',
+    textAlign: 'center' as const,
+    color: '#666',
+  },
+  fallbackToggle: {
+    marginTop: '20px',
     textAlign: 'center' as const,
   },
-  predictionResult: {
-    backgroundColor: 'white',
-    padding: '2rem',
-    borderRadius: '8px',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    width: '100%',
-    maxWidth: '600px',
-  },
-  grade: {
-    fontSize: '1.5rem',
-    fontWeight: 'bold' as const,
-    color: '#2196F3',
-    marginBottom: '1rem',
-  },
-  factors: {
-    marginTop: '1rem',
+  fallbackButton: {
+    padding: '8px 16px',
+    backgroundColor: '#2196F3',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '14px',
   },
 };
 
