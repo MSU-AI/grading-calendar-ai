@@ -11,8 +11,22 @@ interface Document {
 
 interface Prediction {
   grade: number | string;
+  current_percentage: number;
+  letter_grade: string;
+  max_possible_grade: number;
+  min_possible_grade: number;
   reasoning: string;
-  confidence?: number;
+  ai_prediction?: {
+    grade: number | string;
+    reasoning: string;
+  };
+  categorized_grades: {
+    [category: string]: {
+      completed: Array<{ name: string; grade: number }>;
+      remaining: string[];
+      average: number | null;
+    };
+  };
 }
 
 const PredictionPanel: React.FC = () => {
@@ -162,40 +176,66 @@ const PredictionPanel: React.FC = () => {
           <h3>Prediction Result</h3>
           <div style={styles.gradeDisplay}>
             <div style={styles.gradeCircle}>
-              {typeof predictionResult.grade === 'number' 
-                ? predictionResult.grade.toFixed(1) 
-                : predictionResult.grade}
+              {predictionResult.letter_grade}
             </div>
-            <div style={styles.gradeLabel}>Predicted Grade</div>
+            <div style={styles.gradePercentage}>
+              {typeof predictionResult.current_percentage === 'number' 
+                ? `${predictionResult.current_percentage.toFixed(1)}%`
+                : predictionResult.current_percentage}
+            </div>
+            <div style={styles.gradeLabel}>Current Grade</div>
+          </div>
+          
+          <div style={styles.gradeRangeSection}>
+            <h4>Grade Range</h4>
+            <div style={styles.gradeRange}>
+              <div style={styles.rangeItem}>
+                <span style={styles.rangeLabel}>Minimum:</span>
+                <span style={styles.rangeValue}>{predictionResult.min_possible_grade.toFixed(1)}%</span>
+              </div>
+              <div style={styles.rangeItem}>
+                <span style={styles.rangeLabel}>Maximum:</span>
+                <span style={styles.rangeValue}>{predictionResult.max_possible_grade.toFixed(1)}%</span>
+              </div>
+            </div>
           </div>
           
           <div style={styles.reasoningSection}>
             <h4>Analysis</h4>
             <p style={styles.reasoning}>{predictionResult.reasoning}</p>
+            {predictionResult.ai_prediction && (
+              <div style={styles.aiPrediction}>
+                <h4>AI Prediction</h4>
+                <p>{predictionResult.ai_prediction.reasoning}</p>
+              </div>
+            )}
           </div>
           
-          {predictionResult.confidence && (
-            <div style={styles.confidenceBar}>
-              <div style={styles.confidenceLabel}>
-                Confidence: {(predictionResult.confidence * 100).toFixed(1)}%
+          <div style={styles.categoriesSection}>
+            <h4>Grade Breakdown by Category</h4>
+            {Object.entries(predictionResult.categorized_grades).map(([category, data]) => (
+              <div key={category} style={styles.categoryItem}>
+                <h5 style={styles.categoryTitle}>{category}</h5>
+                {data.average !== null && (
+                  <div style={styles.categoryStats}>
+                    <span style={styles.categoryAverage}>
+                      Average: {data.average.toFixed(1)}%
+                    </span>
+                    <span style={styles.categoryProgress}>
+                      Progress: {data.completed.length} completed, {data.remaining.length} remaining
+                    </span>
+                  </div>
+                )}
               </div>
-              <div style={styles.confidenceBarOuter}>
-                <div 
-                  style={{
-                    ...styles.confidenceBarInner,
-                    width: `${predictionResult.confidence * 100}%`
-                  }}
-                />
-              </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
     </div>
   );
 };
 
-const styles = {
+const baseStyles = {
   container: {
     padding: '20px',
     backgroundColor: 'white',
@@ -309,25 +349,6 @@ const styles = {
     lineHeight: '1.6',
     color: '#333',
   },
-  confidenceBar: {
-    marginTop: '15px',
-  },
-  confidenceLabel: {
-    marginBottom: '5px',
-    color: '#555',
-  },
-  confidenceBarOuter: {
-    width: '100%',
-    height: '10px',
-    backgroundColor: '#e0e0e0',
-    borderRadius: '5px',
-    overflow: 'hidden',
-  },
-  confidenceBarInner: {
-    height: '100%',
-    backgroundColor: '#4CAF50',
-    borderRadius: '5px',
-  },
   error: {
     color: '#f44336',
     backgroundColor: '#ffebee',
@@ -342,6 +363,73 @@ const styles = {
     borderRadius: '4px',
     marginBottom: '15px',
   },
+};
+
+const styles = {
+  ...baseStyles,
+  gradePercentage: {
+    fontSize: '24px',
+    color: '#666',
+    marginTop: '5px',
+  },
+  gradeRangeSection: {
+    marginTop: '20px',
+    padding: '15px',
+    backgroundColor: '#fff',
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  },
+  gradeRange: {
+    display: 'flex',
+    justifyContent: 'space-around',
+    marginTop: '10px',
+  },
+  rangeItem: {
+    textAlign: 'center' as const,
+  },
+  rangeLabel: {
+    display: 'block',
+    color: '#666',
+    fontSize: '14px',
+    marginBottom: '5px',
+  },
+  rangeValue: {
+    display: 'block',
+    color: '#333',
+    fontSize: '20px',
+    fontWeight: 'bold',
+  },
+  aiPrediction: {
+    marginTop: '15px',
+    padding: '15px',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '4px',
+  },
+  categoriesSection: {
+    marginTop: '20px',
+  },
+  categoryItem: {
+    padding: '15px',
+    backgroundColor: '#fff',
+    borderRadius: '8px',
+    marginBottom: '10px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  },
+  categoryTitle: {
+    margin: '0 0 10px 0',
+    color: '#333',
+  },
+  categoryStats: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    color: '#666',
+  },
+  categoryAverage: {
+    fontWeight: 'bold',
+  },
+  categoryProgress: {
+    fontSize: '14px',
+  }
 };
 
 export default PredictionPanel;
