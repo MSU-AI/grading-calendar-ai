@@ -9,7 +9,18 @@ const OpenAI = require('openai');
 admin.initializeApp();
 
 /**
- * Dedicated function for handling PDF document uploads
+ * Handles the upload of PDF documents to Firebase Storage and creates corresponding Firestore records.
+ * This function processes the uploaded document, stores it in the appropriate location based on document type,
+ * and initiates automatic text extraction.
+ *
+ * @param {Object} data - The upload request data
+ * @param {string} data.documentBase64 - Base64 encoded PDF document
+ * @param {string} data.documentType - Type of document ('syllabus', 'transcript', 'grades', etc.)
+ * @param {string} [data.documentName] - Optional custom name for the document
+ * @param {Object} context - The Firebase function context
+ * @param {Object} context.auth - Authentication details of the requesting user
+ * @returns {Promise<Object>} Object containing upload status and file path
+ * @throws {functions.https.HttpsError} If authentication or upload fails
  */
 exports.uploadDocument = functions.https.onCall(async (data, context) => {
   try {
@@ -84,7 +95,14 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Fetch all documents for a user
+ * Retrieves all documents associated with the authenticated user from Firestore.
+ * Returns a list of documents with their metadata including upload status and processing state.
+ *
+ * @param {Object} data - Empty object (no parameters required)
+ * @param {Object} context - The Firebase function context
+ * @param {Object} context.auth - Authentication details of the requesting user
+ * @returns {Promise<Object>} Object containing array of user documents
+ * @throws {functions.https.HttpsError} If authentication fails or documents cannot be retrieved
  */
 exports.getUserDocuments = functions.https.onCall(async (data, context) => {
   try {
@@ -119,7 +137,15 @@ exports.getUserDocuments = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Delete a specific document
+ * Deletes a specific document from both Firebase Storage and Firestore.
+ * Removes both the physical file and its metadata record.
+ *
+ * @param {Object} data - The deletion request data
+ * @param {string} data.documentId - ID of the document to delete
+ * @param {Object} context - The Firebase function context
+ * @param {Object} context.auth - Authentication details of the requesting user
+ * @returns {Promise<Object>} Object indicating deletion success
+ * @throws {functions.https.HttpsError} If authentication fails or document cannot be deleted
  */
 exports.deleteDocument = functions.https.onCall(async (data, context) => {
   try {
@@ -179,8 +205,14 @@ function getOpenAIApiKey() {
 }
 
 /**
- * Triggered when a PDF is uploaded to Firebase Storage
+ * Background function triggered when a PDF is uploaded to Firebase Storage.
+ * Automatically processes newly uploaded PDFs by extracting text and updating document status.
  * Path format: users/{userId}/{documentType}/{filename}.pdf
+ *
+ * @param {Object} object - The Storage object metadata
+ * @param {string} object.name - Full path of the uploaded file
+ * @param {string} object.contentType - MIME type of the uploaded file
+ * @returns {Promise<null>} Returns null on completion
  */
 exports.processPdfUpload = functions.storage.object().onFinalize(async (object) => {
   try {
@@ -258,7 +290,15 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
 });
 
 /**
- * Callable function to extract text from a PDF
+ * Extracts text content from a previously uploaded PDF document.
+ * Uses pdf-parse library to extract text and stores the result in Firestore.
+ *
+ * @param {Object} data - The extraction request data
+ * @param {string} data.documentId - ID of the document to process
+ * @param {Object} context - The Firebase function context
+ * @param {Object} context.auth - Authentication details of the requesting user
+ * @returns {Promise<Object>} Object containing extraction status and text length
+ * @throws {functions.https.HttpsError} If extraction fails or document not found
  */
 exports.extractPdfText = functions.https.onCall(async (data, context) => {
   try {
@@ -321,7 +361,14 @@ exports.extractPdfText = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Callable function to predict grades based on extracted document data
+ * Generates grade predictions using OpenAI based on processed document data.
+ * Analyzes syllabus, transcript, and other documents to predict academic performance.
+ *
+ * @param {Object} data - Empty object (uses stored document data)
+ * @param {Object} context - The Firebase function context
+ * @param {Object} context.auth - Authentication details of the requesting user
+ * @returns {Promise<Object>} Object containing prediction results
+ * @throws {functions.https.HttpsError} If prediction fails or no processed documents found
  */
 exports.predictGrades = functions.https.onCall(async (data, context) => {
   try {
@@ -344,41 +391,90 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
     const documentsRef = db.collection('users').doc(userId).collection('documents');
     const snapshot = await documentsRef.where('status', '==', 'processed').get();
     
-    const docs = {};
+    const structuredData = { 
+      syllabus: null,
+      grades: null,
+      transcript: null
+    };
+    const rawDocs = {};
     const documentIds = [];
     
+    // First try to get structured data from documents
     snapshot.forEach(doc => {
       const data = doc.data();
-      if (data.text) {
-        docs[data.documentType] = data.text;
-        documentIds.push(doc.id);
+      documentIds.push(doc.id);
+      
+      if (data.specialized_data && data.documentType) {
+        structuredData[data.specialized_data.type] = data.specialized_data.data;
+      } else if (data.text) {
+        rawDocs[data.documentType] = data.text;
       }
     });
     
-    if (Object.keys(docs).length === 0) {
-      console.log("No processed documents found for prediction");
-      return {
-        success: false,
-        message: "No processed documents found. Please upload and process at least one document."
-      };
+    // If we don't have structured data, try to process the raw text
+    if (!structuredData.syllabus && !structuredData.grades && !structuredData.transcript) {
+      if (Object.keys(rawDocs).length === 0) {
+        console.log("No processed documents found for prediction");
+        return {
+          success: false,
+          message: "No processed documents found. Please upload and process at least one document."
+        };
+      }
+      
+      // Process the extracted text to structured data
+      console.log("Processing extracted text to structured data");
+      const processedData = await processExtractedText(rawDocs);
+      console.log("Processed data:", JSON.stringify(processedData));
+      
+      // Update structuredData with processed data
+      Object.assign(structuredData, processedData);
     }
     
-    // Process the extracted text to structured data
-    console.log("Processing extracted text to structured data");
-    let structuredData = await processExtractedText(docs);
-    console.log("Structured data:", JSON.stringify(structuredData));
+    // Combine data for calculations (use grades or transcript)
+    const calculationData = {
+      syllabus: structuredData.syllabus,
+      grades: structuredData.grades || structuredData.transcript
+    };
     
-    // Generate prediction based on structured data
+    // Calculate grade statistics
+    console.log("Calculating grade statistics");
+    const gradeStats = calculateGradeStatistics(calculationData);
+    console.log("Grade statistics:", JSON.stringify(gradeStats));
+    
+    // Generate prediction based on structured data and calculated stats
     console.log("Generating prediction");
-    const prediction = await generatePrediction(structuredData);
-    console.log("Prediction result:", JSON.stringify(prediction));
+    let aiPrediction = null;
+    try {
+      aiPrediction = await generatePrediction(structuredData);
+      console.log("AI Prediction result:", JSON.stringify(aiPrediction));
+    } catch (predictionError) {
+      console.error(`Error generating AI prediction: ${predictionError}`);
+      console.error(`Error stack: ${predictionError.stack}`);
+      // Continue without AI prediction
+    }
     
-    // Store prediction in Firestore
+    // Combine stats and AI prediction
+    const combinedPrediction = {
+      grade: gradeStats.current_grade,
+      current_percentage: gradeStats.current_percentage,
+      letter_grade: gradeStats.letter_grade,
+      max_possible_grade: gradeStats.max_possible_grade,
+      min_possible_grade: gradeStats.min_possible_grade,
+      reasoning: gradeStats.analysis,
+      ai_prediction: aiPrediction,
+      categorized_grades: gradeStats.categorized_grades
+    };
+    
+    console.log("Combined prediction:", JSON.stringify(combinedPrediction));
+    
+    // Store prediction
     const predictionRef = db.collection('users').doc(userId).collection('predictions').doc();
     const predictionData = {
-      prediction: prediction,
+      prediction: combinedPrediction,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      documentIds: documentIds
+      documentIds: documentIds,
+      calculatedStats: gradeStats,
+      structured_data: structuredData
     };
     
     console.log("Storing prediction in Firestore");
@@ -388,7 +484,7 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
     
     return {
       success: true,
-      prediction: prediction,
+      prediction: combinedPrediction,
       message: "Grade prediction completed successfully"
     };
   } catch (error) {
@@ -403,7 +499,14 @@ exports.predictGrades = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Helper function to extract text from a PDF
+ * Internal helper function to extract text content from a PDF file.
+ * Downloads the file from Storage, processes it, and updates Firestore with results.
+ *
+ * @param {string} userId - ID of the user who owns the document
+ * @param {string} documentId - ID of the document in Firestore
+ * @param {string} filePath - Storage path to the PDF file
+ * @returns {Promise<string>} Extracted text content
+ * @throws {Error} If text extraction fails
  */
 async function extractTextFromPdf(userId, documentId, filePath) {
   console.log(`Extracting text from PDF: ${filePath} for user ${userId}, document ${documentId}`);
@@ -449,15 +552,74 @@ async function extractTextFromPdf(userId, documentId, filePath) {
     await docRef.set({
       text: extractedText,
       lastExtracted: admin.firestore.FieldValue.serverTimestamp(),
-      status: 'processed',
+      status: 'extracting',
       pageCount: pdfData.numpages
     }, { merge: true });
+    
+    // Now process the extracted text into structured data
+    console.log(`Processing extracted text into structured data`);
+    try {
+      // Get the document type from the document
+      const docData = await docRef.get();
+      const documentType = docData.data().documentType;
+      
+      // Create a docs object for processing
+      const docs = {};
+      docs[documentType] = extractedText;
+      
+      // Process the text
+      const structuredData = await processExtractedText(docs);
+      
+      // Update the document with structured data
+      console.log(`Updating document with structured data`);
+      await docRef.set({
+        structured_data: structuredData[documentType] || null,
+        status: 'processed'
+      }, { merge: true });
+      
+      // Store specialized data directly in the main document
+      if (documentType === 'syllabus' && structuredData.syllabus) {
+        await docRef.set({
+          specialized_data: {
+            type: 'syllabus',
+            data: structuredData.syllabus
+          }
+        }, { merge: true });
+      } else if ((documentType === 'transcript' || documentType === 'grades') && structuredData[documentType]) {
+        await docRef.set({
+          specialized_data: {
+            type: documentType,
+            data: structuredData[documentType]
+          }
+        }, { merge: true });
+      }
+      
+      console.log(`Successfully processed and stored structured data for ${documentType}`);
+    } catch (processError) {
+      console.error(`Error processing extracted text: ${processError}`);
+      console.error(`Error stack: ${processError.stack}`);
+      
+      // Update status to indicate processing error but text extraction succeeded
+      await docRef.set({
+        status: 'extract_only',
+        processError: processError.message
+      }, { merge: true });
+    }
     
     console.log(`Firestore document updated successfully`);
     return extractedText;
   } catch (error) {
     console.error(`Error extracting text from PDF: ${error}`);
     console.error(`Error stack: ${error.stack}`);
+    
+    // Update document to indicate error
+    const db = admin.firestore();
+    const docRef = db.collection('users').doc(userId).collection('documents').doc(documentId);
+    await docRef.set({
+      status: 'error',
+      error: error.message
+    }, { merge: true });
+    
     throw error; // Re-throw to be handled by the calling function
   } finally {
     // Clean up the temp file
@@ -469,7 +631,15 @@ async function extractTextFromPdf(userId, documentId, filePath) {
 }
 
 /**
- * Process extracted text into structured data
+ * Internal helper function to process extracted text into structured data.
+ * Uses OpenAI to analyze and structure the raw text from different document types.
+ *
+ * @param {Object} docs - Object containing extracted text from different documents
+ * @param {string} [docs.syllabus] - Extracted text from syllabus
+ * @param {string} [docs.transcript] - Extracted text from transcript
+ * @param {string} [docs.grades] - Extracted text from grade documents
+ * @returns {Promise<Object>} Structured data extracted from documents
+ * @throws {Error} If processing fails
  */
 async function processExtractedText(docs) {
   console.log('Processing extracted text into structured data');
@@ -622,7 +792,15 @@ async function processExtractedText(docs) {
 }
 
 /**
- * Generate prediction using OpenAI API
+ * Internal helper function to generate grade predictions using OpenAI API.
+ * Constructs prompts and processes API responses to generate final predictions.
+ *
+ * @param {Object} structuredData - Processed data from documents
+ * @param {Object} structuredData.syllabus - Structured syllabus data
+ * @param {Object} structuredData.transcript - Structured transcript data
+ * @param {Object} [structuredData.grades] - Optional structured grades data
+ * @returns {Promise<Object>} Prediction results with grade and reasoning
+ * @throws {Error} If prediction generation fails
  */
 async function generatePrediction(structuredData) {
   console.log('Generating prediction using OpenAI API');
@@ -688,7 +866,205 @@ async function generatePrediction(structuredData) {
 }
 
 /**
- * Construct the prompt for OpenAI - identical to the Python implementation
+ * Internal helper function to calculate grade statistics based on structured data.
+ * Calculates current grade, maximum possible grade, minimum possible grade, and other statistics.
+ *
+ * @param {Object} data - The structured data to analyze
+ * @param {Object} data.syllabus - Syllabus information with grade weights and assignments
+ * @param {Object} data.grades - Current grades information
+ * @returns {Object} Calculated grade statistics
+ */
+function calculateGradeStatistics(data) {
+  console.log('Calculating grade statistics');
+  
+  try {
+    const gradeWeights = data.syllabus.grade_weights || [];
+    const assignments = data.syllabus.assignments || [];
+    const currentGrades = data.grades || [];
+    
+    // Initialize category totals
+    const categoryTotals = {};
+    const categoryMaxPoints = {};
+    const categoryCompletedAssignments = {};
+    const categoryRemainingAssignments = {};
+    
+    // Initialize each category from grade weights
+    gradeWeights.forEach(({ name, weight }) => {
+      categoryTotals[name] = 0;
+      categoryMaxPoints[name] = 0;
+      categoryCompletedAssignments[name] = [];
+      categoryRemainingAssignments[name] = [];
+    });
+    
+    // Process current grades
+    currentGrades.forEach(grade => {
+      const category = gradeWeights.find(w => 
+        grade.name.toLowerCase().includes(w.name.toLowerCase())
+      )?.name || 'Other';
+      
+      if (categoryTotals[category] !== undefined) {
+        categoryTotals[category] += parseFloat(grade.grade) || 0;
+        categoryMaxPoints[category] += 100; // Assuming grades are out of 100
+        categoryCompletedAssignments[category].push(grade);
+      }
+    });
+    
+    // Identify remaining assignments
+    assignments.forEach(assignment => {
+      const category = gradeWeights.find(w => 
+        assignment.toLowerCase().includes(w.name.toLowerCase())
+      )?.name || 'Other';
+      
+      if (categoryTotals[category] !== undefined && 
+          !categoryCompletedAssignments[category].some(g => 
+            g.name.toLowerCase() === assignment.toLowerCase()
+          )) {
+        categoryRemainingAssignments[category].push(assignment);
+      }
+    });
+    
+    // Calculate current grade
+    let currentGradeTotal = 0;
+    let weightTotal = 0;
+    
+    gradeWeights.forEach(({ name, weight }) => {
+      if (categoryMaxPoints[name] > 0) {
+        const categoryPercentage = categoryTotals[name] / categoryMaxPoints[name];
+        currentGradeTotal += categoryPercentage * weight;
+        weightTotal += weight;
+      }
+    });
+    
+    const currentGrade = weightTotal > 0 ? (currentGradeTotal / weightTotal) * 100 : 0;
+    
+    // Calculate maximum possible grade
+    let maxGradeTotal = currentGradeTotal;
+    gradeWeights.forEach(({ name, weight }) => {
+      const remainingPoints = categoryRemainingAssignments[name].length * 100;
+      if (remainingPoints > 0) {
+        maxGradeTotal += (weight * remainingPoints) / 100;
+      }
+    });
+    
+    const maxPossibleGrade = weightTotal > 0 ? (maxGradeTotal / weightTotal) * 100 : 100;
+    
+    // Calculate minimum possible grade
+    const minPossibleGrade = weightTotal > 0 ? (currentGradeTotal / weightTotal) * 100 : 0;
+    
+    // Generate letter grade
+    const letterGrade = getLetterGrade(currentGrade);
+    
+    // Create categorized grades breakdown
+    const categorizedGrades = {};
+    gradeWeights.forEach(({ name }) => {
+      categorizedGrades[name] = {
+        completed: categoryCompletedAssignments[name],
+        remaining: categoryRemainingAssignments[name],
+        average: categoryMaxPoints[name] > 0 
+          ? (categoryTotals[name] / categoryMaxPoints[name]) * 100 
+          : null
+      };
+    });
+    
+    // Generate analysis text
+    const analysis = generateGradeAnalysis({
+      currentGrade,
+      maxPossibleGrade,
+      minPossibleGrade,
+      letterGrade,
+      categorizedGrades
+    });
+    
+    return {
+      current_grade: currentGrade,
+      current_percentage: currentGrade,
+      letter_grade: letterGrade,
+      max_possible_grade: maxPossibleGrade,
+      min_possible_grade: minPossibleGrade,
+      categorized_grades: categorizedGrades,
+      analysis
+    };
+  } catch (error) {
+    console.error('Error calculating grade statistics:', error);
+    return {
+      current_grade: 0,
+      current_percentage: 0,
+      letter_grade: 'N/A',
+      max_possible_grade: 100,
+      min_possible_grade: 0,
+      categorized_grades: {},
+      analysis: 'Unable to calculate grade statistics due to an error.'
+    };
+  }
+}
+
+/**
+ * Helper function to convert numeric grade to letter grade
+ * @param {number} grade - Numeric grade
+ * @returns {string} Letter grade
+ */
+function getLetterGrade(grade) {
+  if (grade >= 93) return 'A';
+  if (grade >= 90) return 'A-';
+  if (grade >= 87) return 'B+';
+  if (grade >= 83) return 'B';
+  if (grade >= 80) return 'B-';
+  if (grade >= 77) return 'C+';
+  if (grade >= 73) return 'C';
+  if (grade >= 70) return 'C-';
+  if (grade >= 67) return 'D+';
+  if (grade >= 63) return 'D';
+  if (grade >= 60) return 'D-';
+  return 'F';
+}
+
+/**
+ * Helper function to generate natural language analysis of grade statistics
+ * @param {Object} stats - Grade statistics
+ * @returns {string} Natural language analysis
+ */
+function generateGradeAnalysis(stats) {
+  const {
+    currentGrade,
+    maxPossibleGrade,
+    minPossibleGrade,
+    letterGrade,
+    categorizedGrades
+  } = stats;
+  
+  const analysis = [];
+  
+  analysis.push(`Current grade is ${currentGrade.toFixed(1)}% (${letterGrade})`);
+  
+  if (maxPossibleGrade > currentGrade) {
+    analysis.push(`Maximum possible grade is ${maxPossibleGrade.toFixed(1)}%`);
+  }
+  
+  if (minPossibleGrade < currentGrade) {
+    analysis.push(`Minimum possible grade is ${minPossibleGrade.toFixed(1)}%`);
+  }
+  
+  // Add category-specific analysis
+  Object.entries(categorizedGrades).forEach(([category, data]) => {
+    if (data.average !== null) {
+      analysis.push(
+        `${category}: ${data.average.toFixed(1)}% average ` +
+        `(${data.completed.length} completed, ${data.remaining.length} remaining)`
+      );
+    }
+  });
+  
+  return analysis.join('. ');
+}
+
+/**
+ * Internal helper function to construct the prompt for OpenAI API.
+ * Formats structured data into a standardized prompt format.
+ *
+ * @param {Object} data - Structured data to include in the prompt
+ * @param {Object} data.syllabus - Syllabus information
+ * @param {Object} [data.transcript] - Optional transcript information
+ * @returns {string} Formatted prompt string
  */
 function constructPrompt(data) {
   console.log('Constructing prompt for OpenAI');

@@ -3,13 +3,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import DocumentManager from './DocumentManager';
 import PredictionPanel from './PredictionPanel';
-import SimplifiedUploader from './SimplifiedUploader';
-
 const Dashboard: React.FC = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>('documents');
-  const [useNewComponents, setUseNewComponents] = useState<boolean>(true);
 
   const handleLogout = async () => {
     try {
@@ -32,51 +29,25 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
       
-      {useNewComponents ? (
-        <>
-          <div style={styles.tabs}>
-            <button 
-              style={activeTab === 'documents' ? styles.activeTab : styles.tab}
-              onClick={() => setActiveTab('documents')}
-            >
-              Document Manager
-            </button>
-            <button 
-              style={activeTab === 'prediction' ? styles.activeTab : styles.tab}
-              onClick={() => setActiveTab('prediction')}
-            >
-              Grade Prediction
-            </button>
-          </div>
-          
-          <div style={styles.content}>
-            {activeTab === 'documents' && <DocumentManager />}
-            {activeTab === 'prediction' && <PredictionPanel />}
-          </div>
-          
-          {/* Fallback toggle for testing - remove in production */}
-          <div style={styles.fallbackToggle}>
-            <button 
-              onClick={() => setUseNewComponents(false)}
-              style={styles.fallbackButton}
-            >
-              Switch to Legacy Mode
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <SimplifiedUploader />
-          <div style={styles.fallbackToggle}>
-            <button 
-              onClick={() => setUseNewComponents(true)}
-              style={styles.fallbackButton}
-            >
-              Switch to New Interface
-            </button>
-          </div>
-        </>
-      )}
+      <div style={styles.tabs}>
+        <button 
+          style={activeTab === 'documents' ? styles.activeTab : styles.tab}
+          onClick={() => setActiveTab('documents')}
+        >
+          Document Manager
+        </button>
+        <button 
+          style={activeTab === 'prediction' ? styles.activeTab : styles.tab}
+          onClick={() => setActiveTab('prediction')}
+        >
+          Grade Prediction
+        </button>
+      </div>
+      
+      <div style={styles.content}>
+        {activeTab === 'documents' && <DocumentManager />}
+        {activeTab === 'prediction' && <PredictionPanel />}
+      </div>
       
       <div style={styles.footer}>
         <p>Upload your academic documents and get a prediction of your final grade.</p>
@@ -160,19 +131,6 @@ const styles = {
     borderRadius: '8px',
     textAlign: 'center' as const,
     color: '#666',
-  },
-  fallbackToggle: {
-    marginTop: '20px',
-    textAlign: 'center' as const,
-  },
-  fallbackButton: {
-    padding: '8px 16px',
-    backgroundColor: '#2196F3',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '14px',
   },
 };
 
