@@ -30,7 +30,7 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
     // Get document name or generate one
     const documentName = data.documentName || `${data.documentType}_${Date.now()}.pdf`;
     
-    // Process base64 data - handle different formats of base64 strings
+    // Process base64 data
     let base64Data = data.documentBase64;
     if (base64Data.includes('base64,')) {
       base64Data = base64Data.split('base64,')[1];
@@ -48,31 +48,22 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
     try {
       // Get default bucket
       const bucket = admin.storage().bucket();
-      const filePath = `users/${userId}/${data.documentType}/${Date.now()}.pdf`;
+      const filePath = `users/${userId}/${data.documentType}/${documentName}`;
       
       console.log(`Uploading to Firebase Storage: ${filePath}`);
       await bucket.upload(tempFile.name, {
         destination: filePath,
         metadata: {
-          contentType: 'application/pdf'
+          contentType: 'application/pdf',
+          metadata: {
+            originalName: documentName // Store original filename in metadata
+          }
         }
       });
       
       console.log(`Successfully uploaded to ${filePath}`);
       
-      // Store reference in Firestore with auto-generated ID
-      const db = admin.firestore();
-      const docRef = db.collection('users').doc(userId).collection('documents').doc();
-      
-      await docRef.set({
-        filePath: filePath,
-        documentType: data.documentType,
-        name: documentName,
-        uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
-        status: 'uploaded'
-      });
-      
-      console.log(`Firestore document updated for ${filePath}`);
+      // The Firestore record will be created by the processPdfUpload function
       
       return {
         success: true,
@@ -216,14 +207,30 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
     
     console.log(`Processing uploaded PDF: ${filePath} for user: ${userId}, type: ${documentType}`);
     
-    // Store basic information in Firestore with auto-generated ID
+    // Get original filename from metadata if available, otherwise use path
+    const originalName = object.metadata && object.metadata.originalName 
+      ? object.metadata.originalName 
+      : pathParts[3]; // Use the filename from the path
+    
+    // Check if document already exists with same path to avoid duplicates
     const db = admin.firestore();
+    const existingDocs = await db.collection('users').doc(userId)
+      .collection('documents')
+      .where('filePath', '==', filePath)
+      .get();
+    
+    if (!existingDocs.empty) {
+      console.log(`Document with path ${filePath} already exists, skipping`);
+      return null;
+    }
+    
+    // Store basic information in Firestore with auto-generated ID
     const docRef = db.collection('users').doc(userId).collection('documents').doc();
     
     await docRef.set({
       filePath: filePath,
       documentType: documentType,
-      name: pathParts[3], // Use the filename from the path
+      name: originalName,
       uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
       status: 'uploaded'
     });
@@ -562,14 +569,14 @@ async function processExtractedText(docs) {
   if (docs.grades) {
     console.log('Processing grades text');
     try {
-      // Process grades text with OpenAI
+      // Process grades text with OpenAI - improved prompt
       console.log('Calling OpenAI API for grades processing');
       const response = await openai.chat.completions.create({
         model: "gpt-3.5-turbo",
         messages: [
           {
             role: "system",
-            content: "Extract current grades from this document in JSON format as an array of {name, grade}"
+            content: "Extract current grades from this document in JSON format. Parse the document carefully, looking for assignment names and their corresponding grades. Return an array of objects, each with 'name' and 'grade' properties. For each assignment that has a score, include it as a numeric value. For assignments with 'Dropped!' status, set the grade property to 'Dropped'. Format example: [{\"name\": \"Week 1 HW\", \"grade\": 100}, {\"name\": \"Week 2 HW\", \"grade\": 95.5}, {\"name\": \"Quiz 1\", \"grade\": \"Dropped\"}]"
           },
           { role: "user", content: docs.grades.substring(0, 4000) } // Limit length to avoid token limits
         ]
@@ -578,9 +585,28 @@ async function processExtractedText(docs) {
       const content = response.choices[0].message.content;
       console.log(`OpenAI response for grades: ${content.substring(0, 200)}...`);
       
-      const gradesData = JSON.parse(content);
-      structuredData.grades = gradesData;
-      console.log('Successfully parsed grades data');
+      // Try to parse JSON response, but handle cases where the response might not be valid JSON
+      try {
+        const gradesData = JSON.parse(content);
+        structuredData.grades = gradesData;
+        console.log('Successfully parsed grades data');
+      } catch (parseError) {
+        console.error(`Failed to parse grades JSON: ${parseError}`);
+        // Try to extract JSON from the response (sometimes OpenAI adds explanatory text)
+        const jsonMatch = content.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          try {
+            const gradesData = JSON.parse(jsonMatch[0]);
+            structuredData.grades = gradesData;
+            console.log('Successfully parsed grades data from extracted JSON');
+          } catch (nestedError) {
+            console.error(`Failed to parse extracted JSON: ${nestedError}`);
+            structuredData.grades = [];
+          }
+        } else {
+          structuredData.grades = [];
+        }
+      }
     } catch (error) {
       console.error(`Error processing grades with OpenAI: ${error}`);
       console.error(`Error stack: ${error.stack}`);
