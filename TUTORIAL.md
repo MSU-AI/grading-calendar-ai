@@ -1,6 +1,6 @@
 # Academic Performance Predictor - Developer Onboarding Guide
 
-Welcome to the Academic Performance Predictor project! This guide will help you get set up, understand the codebase, and start contributing effectively.
+Welcome to the Academic Performance Predictor project! This guide will help team members understand the codebase and start contributing effectively.
 
 ## Project Overview
 
@@ -22,10 +22,8 @@ The Academic Performance Predictor is a web application that:
 ## Prerequisites
 
 - Node.js (v16+) and npm
-- Firebase CLI
 - Git
 - A code editor (VS Code recommended)
-- A Firebase project with Blaze plan (required for Cloud Functions)
 
 ## Getting Started
 
@@ -60,50 +58,7 @@ npm install
 cd ..
 ```
 
-### 3. Set Up Firebase
-
-Install the Firebase CLI if you haven't already:
-
-```bash
-npm install -g firebase-tools
-```
-
-Log in to Firebase:
-
-```bash
-firebase login
-```
-
-Configure the project to use your Firebase project:
-
-```bash
-firebase use --add
-```
-
-Select your Firebase project when prompted.
-
-### 4. Set Up Environment Variables
-
-Create a `.env` file in the `functions-node` directory:
-
-```bash
-cd functions-node
-touch .env
-```
-
-Add your OpenAI API key:
-
-```
-OPENAI_API_KEY=your_api_key_here
-```
-
-Or set it in Firebase using:
-
-```bash
-firebase functions:config:set openai.apikey="your_api_key_here"
-```
-
-### 5. Run the Project Locally
+### 3. Run the Project Locally
 
 Start the Firebase emulators:
 
@@ -119,6 +74,10 @@ npm start
 ```
 
 This will run the app at [http://localhost:3000](http://localhost:3000).
+
+## Testing Cloud Functions
+
+**Important:** To test Cloud Functions, you need access to the Firebase project. Contact the project owner to be added as a collaborator. Once added, you'll be able to test functions directly against the Firebase infrastructure.
 
 ## Project Structure
 
@@ -178,15 +137,10 @@ After making changes to Cloud Functions, you can test them in several ways:
    node test-pdf-parse.js path/to/test/file.pdf
    ```
 
-3. **Testing API endpoints directly:**
-   - Use the Firebase Functions shell:
-   ```bash
-   firebase functions:shell
-   ```
-   - Call a function:
-   ```
-   extractPdfText({documentId: "your-doc-id"})
-   ```
+3. **Testing with the frontend:**
+   - Make changes to the functions
+   - Run the emulator
+   - Use the web app to test the functionality
 
 ### 2. Frontend Testing
 
@@ -199,7 +153,7 @@ After making changes to Cloud Functions, you can test them in several ways:
 2. **Testing with real data:**
    - Create a test user account
    - Upload test PDF documents
-   - Check the Firestore database in the Firebase console
+   - Check the app's response and UI
 
 3. **Testing UI interactions:**
    - Test form submissions
@@ -232,10 +186,7 @@ After making changes to Cloud Functions, you can test them in several ways:
    });
    ```
 
-3. Deploy the function:
-   ```bash
-   firebase deploy --only functions
-   ```
+3. Test your function locally with the emulator
 
 ### Calling a Cloud Function from the Frontend
 
@@ -274,51 +225,45 @@ response.set('Access-Control-Allow-Headers', 'Content-Type');
 ### 2. Firebase Authentication Problems
 
 Common issues include:
-- Not initializing the Firebase app correctly
-- Missing authentication rules
 - Not handling auth state properly
+- Issues with login/logout functionality
+- Problems with protected routes
 
-Check the AuthContext implementation and Firebase configuration.
+Check the AuthContext implementation and make sure you're correctly using the authentication hooks.
 
 ### 3. PDF Processing Errors
 
 When dealing with PDF processing:
 - Make sure the PDF is valid and not corrupted
-- Verify file permissions
-- Check if the file size is within Firebase limits
-- Review OpenAI API quotas if using AI processing
+- Test with different file sizes
+- Add proper error handling for PDF processing failures
 
 ## Tips and Tricks
 
-1. **Use Firebase Console** - It's your best friend for debugging:
-   - View Firestore data
-   - Test authentication
-   - Monitor Cloud Functions logs
-   - Check Storage files
+1. **Use Firebase Console for Debugging** - If you have access, it's great for:
+   - Viewing Firestore data
+   - Testing authentication
+   - Monitoring Cloud Functions logs
+   - Checking Storage files
 
 2. **Leverage the Firebase Emulators**:
    - They provide a local development environment
-   - Don't incur costs during testing
    - Allow faster iteration
+   - Don't require full Firebase access for basic testing
 
 3. **Add console.log statements** in Cloud Functions for debugging:
    ```javascript
    console.log('Function called with data:', JSON.stringify(data));
    ```
-   View logs in Firebase console or emulator UI.
+   View logs in the emulator UI.
 
 4. **Use React Developer Tools** browser extension for debugging React components.
 
-5. **Batch Firestore operations** when working with multiple documents:
-   ```javascript
-   const batch = db.batch();
-   // Add your batch operations
-   await batch.commit();
-   ```
+5. **Test with sample PDFs** of various formats to ensure robust processing.
 
-6. **Test with sample PDFs** of various formats to ensure robust processing.
+6. **Use AI tools for assistance** - You can use AI tools like Claude or ChatGPT to help with coding by providing context from the files. The [AI Digest](https://github.com/khromov/ai-digest) tool mentioned in the intro can help with this.
 
-## Next Steps for Development
+## Feature Development Ideas
 
 Here are some features that could be improved or added:
 
@@ -326,10 +271,9 @@ Here are some features that could be improved or added:
 2. **Enhanced PDF extraction** - Improve OCR accuracy and structured data extraction
 3. **Real-time updates** - Implement WebSockets for live status updates
 4. **Mobile responsive design** - Improve mobile experience
-5. **Offline support** - Add offline capabilities using PWA features
-6. **User dashboard improvements** - More visualization options for grades
-7. **Multi-course support** - Handle multiple courses simultaneously
-8. **Integration with LMS** - Connect with Canvas, Blackboard, etc.
+5. **User dashboard improvements** - More visualization options for grades
+6. **Multi-course support** - Handle multiple courses simultaneously
+7. **Advanced prediction features** - Add more sophisticated grade prediction algorithms
 
 ## Getting Help
 
@@ -338,21 +282,17 @@ If you encounter any issues:
 2. Look at existing code patterns
 3. Use console logs for debugging
 4. Ask for help in the team chat
-5. Use AI tools like Claude or ChatGPT by providing the relevant code context
+5. Use AI tools by providing the relevant code context
+6. Contact the project owner for Firebase access issues
 
-## Deployment
+## Submitting Your Changes
 
-When ready to deploy your changes:
+When you've completed your feature or bug fix:
 
-```bash
-# Deploy everything
-firebase deploy
-
-# Deploy only functions
-firebase deploy --only functions
-
-# Deploy only hosting
-firebase deploy --only hosting
-```
+1. Create a branch with a descriptive name
+2. Commit your changes with clear messages
+3. Push your branch
+4. Create a pull request
+5. Provide details about what you changed and how to test it
 
 Happy coding! Remember, the goal is to make an app that helps students track and improve their academic performance.
