@@ -665,13 +665,13 @@ async function processExtractedText(docs) {
       // Process syllabus text with OpenAI
       console.log('Calling OpenAI API for syllabus processing');
       const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
             content: "Extract the following information from this syllabus in JSON format: course_name, instructor, grade_weights (array of {name, weight}), assignments (array), due_dates (array of {assignment, due_date}), credit_hours"
           },
-          { role: "user", content: docs.syllabus.substring(0, 4000) } // Limit length to avoid token limits
+          { role: "user", content: docs.syllabus.substring(0, 10000) } // Limit length to avoid token limits
         ]
       });
       
@@ -707,13 +707,13 @@ async function processExtractedText(docs) {
       // Process transcript text with OpenAI
       console.log('Calling OpenAI API for transcript processing');
       const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
             content: "Extract the following information from this transcript in JSON format: gpa, final_grade"
           },
-          { role: "user", content: docs.transcript.substring(0, 4000) } // Limit length to avoid token limits
+          { role: "user", content: docs.transcript.substring(0, 10000) } // Limit length to avoid token limits
         ]
       });
       
@@ -742,13 +742,13 @@ async function processExtractedText(docs) {
       // Process grades text with OpenAI - improved prompt
       console.log('Calling OpenAI API for grades processing');
       const response = await openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
             content: "Extract current grades from this document in JSON format. Parse the document carefully, looking for assignment names and their corresponding grades. Return an array of objects, each with 'name' and 'grade' properties. For each assignment that has a score, include it as a numeric value. For assignments with 'Dropped!' status, set the grade property to 'Dropped'. Format example: [{\"name\": \"Week 1 HW\", \"grade\": 100}, {\"name\": \"Week 2 HW\", \"grade\": 95.5}, {\"name\": \"Quiz 1\", \"grade\": \"Dropped\"}]"
           },
-          { role: "user", content: docs.grades.substring(0, 4000) } // Limit length to avoid token limits
+          { role: "user", content: docs.grades.substring(0, 10000) } // Limit length to avoid token limits
         ]
       });
       
@@ -827,7 +827,7 @@ async function generatePrediction(structuredData) {
     // Call the OpenAI API
     console.log('Calling OpenAI API for prediction');
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o",
       messages: [
         { role: "system", content: "You are a concise academic advisor." },
         { role: "user", content: prompt }
