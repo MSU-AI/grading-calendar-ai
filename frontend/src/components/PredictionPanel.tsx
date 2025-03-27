@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
+import { calculateCurrentGrade, predictFinalGrade } from '../services/gradeService';
 
 interface Document {
   id: string;
@@ -91,18 +92,28 @@ const PredictionPanel: React.FC = () => {
     setStatus('Generating prediction...');
 
     try {
-      // Call the predictGrades function
-      const predictGrades = httpsCallable(functions, 'predictGrades');
-      const result = await predictGrades({});
+      // First get the current grade calculation
+      const calculationResult: any = await calculateCurrentGrade({
+        useStoredData: true,
+        storeResult: true
+      });
       
-      const data = result.data as any;
-      
-      if (data.success && data.prediction) {
-        setPredictionResult(data.prediction);
-        setStatus('Prediction generated successfully!');
-      } else {
-        setError(data.message || 'Failed to generate prediction');
+      if (!calculationResult.success) {
+        throw new Error(calculationResult.message || 'Failed to calculate current grade');
       }
+      
+      // Then get the prediction using the calculation
+      const predictionResult: any = await predictFinalGrade({
+        useStoredData: true,
+        currentCalculation: calculationResult.calculation
+      });
+      
+      if (!predictionResult.success) {
+        throw new Error(predictionResult.message || 'Failed to generate prediction');
+      }
+      
+      setPredictionResult(predictionResult.prediction);
+      setStatus('Prediction generated successfully!');
     } catch (error: any) {
       console.error('Prediction error:', error);
       setError(error.message || 'An error occurred during prediction');

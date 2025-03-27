@@ -4,9 +4,15 @@ const pdfParse = require('pdf-parse');
 const tmp = require('tmp');
 const fs = require('fs');
 const OpenAI = require('openai');
+const { calculateCurrentGrade } = require('./calculateGrade');
+const { predictFinalGrade } = require('./predictGrade');
 
 // Initialize Firebase Admin
 admin.initializeApp();
+
+// Export new grade calculation and prediction functions
+exports.calculateCurrentGrade = calculateCurrentGrade;
+exports.predictFinalGrade = predictFinalGrade;
 
 /**
  * Handles the upload of PDF documents to Firebase Storage and creates corresponding Firestore records.
