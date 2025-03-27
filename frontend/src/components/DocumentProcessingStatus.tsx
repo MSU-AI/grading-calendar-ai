@@ -96,7 +96,7 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     });
     
     return () => unsubscribe();
-  }, [currentUser, db, onProcessingComplete]);
+  }, [currentUser, db, onProcessingComplete, processingComplete]);
 
   // Calculate document counts with case-insensitive comparison
   const documentCounts = {
