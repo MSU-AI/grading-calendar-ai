@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import DocumentProcessingStatus from './DocumentProcessingStatus';
 
 interface Document {
   id: string;
@@ -142,6 +143,8 @@ const DocumentManager: React.FC = () => {
       
       {error && <p style={styles.error}>{error}</p>}
       {status && <p style={styles.status}>{status}</p>}
+      
+      <DocumentProcessingStatus />
       
       <form onSubmit={handleUpload} style={styles.form}>
         <div style={styles.fileInputContainer}>

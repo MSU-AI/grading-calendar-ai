@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc } from 'firebase/firestore';
+import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { calculateCurrentGrade, predictFinalGrade } from '../services/gradeService';
+import DocumentProcessingStatus from './DocumentProcessingStatus';
 
 interface Document {
   id: string;
@@ -18,7 +19,8 @@ interface Prediction {
   min_possible_grade: number;
   reasoning: string;
   ai_prediction?: {
-    grade: number | string;
+    grade: string;
+    numerical_grade: number;
     reasoning: string;
   };
   categorized_grades: {
@@ -37,30 +39,14 @@ const PredictionPanel: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
+  const [processingComplete, setProcessingComplete] = useState<boolean>(false);
   
   const functions = getFunctions();
   const db = getFirestore();
 
-  // Memoize fetchDocuments with useCallback
-  const fetchDocuments = useCallback(async () => {
-    try {
-      const getUserDocuments = httpsCallable(functions, 'getUserDocuments');
-      const result = await getUserDocuments();
-      
-      if ((result.data as any).success) {
-        setDocuments((result.data as any).documents || []);
-      }
-    } catch (err) {
-      console.error('Error fetching documents:', err);
-    }
-  }, [functions]);
-
   // Listen for documents and predictions
   useEffect(() => {
     if (!currentUser) return;
-
-    // Fetch documents initially
-    fetchDocuments();
 
     // Listen for the latest prediction
     const userDocRef = doc(db, 'users', currentUser.uid);
@@ -77,14 +63,26 @@ const PredictionPanel: React.FC = () => {
     });
 
     return () => unsubscribe();
-  }, [currentUser, db, fetchDocuments]);
+  }, [currentUser, db]);
 
   const handlePredict = async () => {
-    // Check if we have enough documents
-    const processedDocs = documents.filter(doc => doc.status === 'processed');
-    if (processedDocs.length === 0) {
-      setError('No processed documents found. Please upload at least one document first.');
+    if (!currentUser) {
+      setError('You must be logged in to generate predictions');
       return;
+    }
+    
+    // Check if we have formatted data
+    try {
+      const formattedDataDocRef = doc(db, 'users', currentUser.uid, 'data', 'formatted_data');
+      const formattedDataDoc = await getDoc(formattedDataDocRef);
+      
+      if (!formattedDataDoc.exists()) {
+        setError('No formatted data found. Please upload and process documents first.');
+        return;
+      }
+    } catch (err) {
+      console.error('Error checking for formatted data:', err);
+      // Continue anyway, the calculation function will handle this error
     }
 
     setIsPredicting(true);
@@ -129,8 +127,8 @@ const PredictionPanel: React.FC = () => {
     }
   };
 
-  // Determine if we can make a prediction based on document status
-  const canPredict = documents.some(doc => doc.status === 'processed');
+  // Determine if we can make a prediction based on document status or processing completion
+  const canPredict = documents.some(doc => doc.status === 'processed') || processingComplete;
   
   // Get count of documents by type
   const docCounts = documents.reduce((acc: Record<string, number>, doc) => {
@@ -142,27 +140,7 @@ const PredictionPanel: React.FC = () => {
     <div style={styles.container}>
       <h2 style={styles.title}>Grade Prediction</h2>
       
-      <div style={styles.documentSummary}>
-        <h3>Available Documents</h3>
-        <div style={styles.documentStats}>
-          <div style={styles.statItem}>
-            <span style={styles.statLabel}>Syllabus:</span>
-            <span style={styles.statValue}>{docCounts.syllabus || 0}</span>
-          </div>
-          <div style={styles.statItem}>
-            <span style={styles.statLabel}>Transcript:</span>
-            <span style={styles.statValue}>{docCounts.transcript || 0}</span>
-          </div>
-          <div style={styles.statItem}>
-            <span style={styles.statLabel}>Grades:</span>
-            <span style={styles.statValue}>{docCounts.grades || 0}</span>
-          </div>
-          <div style={styles.statItem}>
-            <span style={styles.statLabel}>Other:</span>
-            <span style={styles.statValue}>{docCounts.other || 0}</span>
-          </div>
-        </div>
-      </div>
+      <DocumentProcessingStatus onProcessingComplete={() => setProcessingComplete(true)} />
       
       {error && <p style={styles.error}>{error}</p>}
       {status && <p style={styles.status}>{status}</p>}
@@ -175,18 +153,6 @@ const PredictionPanel: React.FC = () => {
         >
           {isPredicting ? 'Generating Prediction...' : 'Predict Grade'}
         </button>
-        
-        {!canPredict && documents.length > 0 && (
-          <p style={styles.waitingMessage}>
-            Waiting for document processing to complete...
-          </p>
-        )}
-        
-        {documents.length === 0 && (
-          <p style={styles.noDocumentsMessage}>
-            Please upload documents first to enable prediction
-          </p>
-        )}
       </div>
 
       {predictionResult && predictionResult.categorized_grades && (
@@ -232,6 +198,7 @@ const PredictionPanel: React.FC = () => {
             {predictionResult.ai_prediction && (
               <div style={styles.aiPrediction}>
                 <h4>AI Prediction</h4>
+                <p><strong>Predicted Grade: {predictionResult.ai_prediction.grade} ({predictionResult.ai_prediction.numerical_grade.toFixed(1)}%)</strong></p>
                 <p>{predictionResult.ai_prediction.reasoning || 'No AI reasoning available'}</p>
               </div>
             )}

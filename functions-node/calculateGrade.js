@@ -1,6 +1,5 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const { formatDataForCalculation } = require('./formatDocumentData');
 
 /**
  * Cloud Function to calculate current grade based on submitted assignments
@@ -30,20 +29,18 @@ exports.calculateCurrentGrade = functions.https.onCall(async (data, context) => 
       );
     }
     
-    // Format data - Note this is now awaited as it's async
-    const formattedData = await formatDataForCalculation(structuredData);
-    
+    // Use the formatted data directly for calculation
     // Extract only the parts needed for grade calculation
     const calculationData = {
-      course: formattedData.course,
-      gradeWeights: formattedData.gradeWeights,
-      completedAssignments: formattedData.completedAssignments,
-      remainingAssignments: formattedData.remainingAssignments,
-      dueDates: formattedData.dueDates,
-      gpa: formattedData.gpa
+      course: structuredData.course,
+      gradeWeights: structuredData.gradeWeights,
+      completedAssignments: structuredData.completedAssignments,
+      remainingAssignments: structuredData.remainingAssignments,
+      dueDates: structuredData.dueDates,
+      gpa: structuredData.gpa
     };
     
-    // Calculate grades using only the relevant subset of data
+    // Calculate grades using the formatted data
     const gradeStats = calculateExactGradeStatistics(calculationData);
     
     // Optionally store calculation result
@@ -54,7 +51,7 @@ exports.calculateCurrentGrade = functions.https.onCall(async (data, context) => 
     return {
       success: true,
       calculation: gradeStats,
-      formatted_data: formattedData
+      formatted_data: structuredData
     };
   } catch (error) {
     console.error(`Error in calculateCurrentGrade: ${error}`);
@@ -228,54 +225,41 @@ function generateGradeAnalysis(stats) {
  * @returns {Promise<Object>} Structured data
  */
 async function fetchStructuredDataFromFirestore(userId) {
-  console.log(`Fetching structured data for user ${userId}`);
+  console.log(`Fetching formatted data for user ${userId}`);
   const db = admin.firestore();
-  const structuredData = {};
   
   try {
-    // Fetch latest syllabus
-    const syllabusQuery = db.collection('users').doc(userId)
-      .collection('documents')
-      .where('documentType', '==', 'syllabus')
-      .where('status', '==', 'processed')
-      .orderBy('uploadedAt', 'desc')
-      .limit(1);
+    // Fetch the unified formatted data
+    const formattedDataDoc = await db.collection('users').doc(userId)
+      .collection('data').doc('formatted_data').get();
     
-    const syllabusSnapshot = await syllabusQuery.get();
-    
-    if (!syllabusSnapshot.empty) {
-      const syllabusDoc = syllabusSnapshot.docs[0];
-      const syllabusData = syllabusDoc.data();
+    if (!formattedDataDoc.exists) {
+      console.log('No formatted data found, checking for documents that need formatting');
       
-      if (syllabusData.specialized_data && syllabusData.specialized_data.data) {
-        structuredData.syllabus = syllabusData.specialized_data.data;
-      } else if (syllabusData.structured_data) {
-        structuredData.syllabus = syllabusData.structured_data;
+      // Check if we have documents that need formatting
+      const documentsRef = db.collection('users').doc(userId).collection('documents');
+      const extractedDocs = await documentsRef.where('status', '==', 'extracted').get();
+      
+      if (!extractedDocs.empty) {
+        console.log('Found extracted documents, triggering formatting');
+        // Import the formatDocumentsData function dynamically to avoid circular dependencies
+        const { formatDocumentsData } = require('./formatDocumentsData');
+        
+        // Format the documents
+        const formattedData = await formatDocumentsData(userId);
+        
+        if (formattedData) {
+          console.log('Successfully formatted documents');
+          return formattedData;
+        }
       }
+      
+      throw new Error('No formatted data available. Please upload and process documents first.');
     }
     
-    // Fetch latest grades
-    const gradesQuery = db.collection('users').doc(userId)
-      .collection('documents')
-      .where('documentType', 'in', ['grades', 'transcript'])
-      .where('status', '==', 'processed')
-      .orderBy('uploadedAt', 'desc')
-      .limit(1);
-    
-    const gradesSnapshot = await gradesQuery.get();
-    
-    if (!gradesSnapshot.empty) {
-      const gradesDoc = gradesSnapshot.docs[0];
-      const gradesData = gradesDoc.data();
-      
-      if (gradesData.specialized_data && gradesData.specialized_data.data) {
-        structuredData[gradesData.documentType] = gradesData.specialized_data.data;
-      } else if (gradesData.structured_data) {
-        structuredData[gradesData.documentType] = gradesData.structured_data;
-      }
-    }
-    
-    return structuredData;
+    // Return the formatted data
+    const data = formattedDataDoc.data();
+    return data.formatted_data;
   } catch (error) {
     console.error(`Error fetching structured data: ${error}`);
     throw error;

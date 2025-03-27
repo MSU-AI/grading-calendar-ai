@@ -6,13 +6,43 @@ const fs = require('fs');
 const OpenAI = require('openai');
 const { calculateCurrentGrade } = require('./calculateGrade');
 const { predictFinalGrade } = require('./predictGrade');
+const { formatDocumentsData } = require('./formatDocumentsData');
 
 // Initialize Firebase Admin
 admin.initializeApp();
 
-// Export new grade calculation and prediction functions
+// Export functions
 exports.calculateCurrentGrade = calculateCurrentGrade;
 exports.predictFinalGrade = predictFinalGrade;
+exports.formatDocumentsData = functions.https.onCall(async (data, context) => {
+  try {
+    // Ensure user is authenticated
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const userId = context.auth.uid;
+    console.log(`Manual formatting requested for user ${userId}`);
+    
+    // Call the formatDocumentsData function
+    const formattedData = await formatDocumentsData(userId);
+    
+    if (!formattedData) {
+      throw new functions.https.HttpsError(
+        'failed-precondition',
+        'No documents available for formatting or formatting failed'
+      );
+    }
+    
+    return {
+      success: true,
+      message: 'Documents formatted successfully'
+    };
+  } catch (error) {
+    console.error('Error in formatDocumentsData:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
 
 /**
  * Handles the upload of PDF documents to Firebase Storage and creates corresponding Firestore records.
@@ -80,7 +110,19 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
       
       console.log(`Successfully uploaded to ${filePath}`);
       
-      // The Firestore record will be created by the processPdfUpload function
+      // Create a basic document record
+      const db = admin.firestore();
+      const docRef = db.collection('users').doc(userId).collection('documents').doc();
+      
+      await docRef.set({
+        filePath: filePath,
+        documentType: data.documentType,
+        name: documentName,
+        uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'uploaded'
+      });
+      
+      console.log(`Created initial document record in Firestore for ${filePath}`);
       
       return {
         success: true,
@@ -275,16 +317,8 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
     
     console.log(`PDF upload metadata saved to Firestore for ${filePath}`);
     
-    // Automatically extract text from the PDF
-    try {
-      console.log(`Starting automatic text extraction for ${filePath}`);
-      await extractTextFromPdf(userId, docRef.id, filePath);
-      console.log(`Automatic text extraction completed for ${filePath}`);
-    } catch (extractError) {
-      console.error(`Error automatically extracting text: ${extractError}`);
-      console.error(`Error stack: ${extractError.stack}`);
-      // Continue execution even if extraction fails - user can retry later
-    }
+    // The text extraction will be handled by the processPdfUpload function
+    // which is triggered by the Storage upload event
     
     console.log(`processPdfUpload completed successfully for ${filePath}`);
     return null;
@@ -296,8 +330,8 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
 });
 
 /**
- * Extracts text content from a previously uploaded PDF document.
- * Uses pdf-parse library to extract text and stores the result in Firestore.
+ * Cloud Function to manually trigger text extraction for a document.
+ * This can be used if the automatic extraction failed.
  *
  * @param {Object} data - The extraction request data
  * @param {string} data.documentId - ID of the document to process
@@ -308,7 +342,7 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
  */
 exports.extractPdfText = functions.https.onCall(async (data, context) => {
   try {
-    console.log('extractPdfText called with data:', JSON.stringify(data));
+    console.log('Manual text extraction requested with data:', JSON.stringify(data));
     
     // Ensure user is authenticated
     if (!context.auth) {
@@ -342,12 +376,26 @@ exports.extractPdfText = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('not-found', 'File path not found for document');
     }
     
-    console.log(`Starting text extraction for ${filePath}`);
+    console.log(`Starting manual text extraction for ${filePath}`);
     
     // Extract text from the PDF
     const extractedText = await extractTextFromPdf(userId, documentId, filePath);
     
     console.log(`Text extraction successful, ${extractedText.length} characters extracted`);
+    
+    // Check if we have enough documents to format data
+    const documentsRef = db.collection('users').doc(userId).collection('documents');
+    const extractedDocs = await documentsRef.where('status', '==', 'extracted').get();
+    
+    if (!extractedDocs.empty) {
+      // Try to format the documents
+      try {
+        await formatDocumentsData(userId);
+      } catch (formatError) {
+        console.error('Error formatting documents:', formatError);
+        // Continue without failing the function
+      }
+    }
     
     return {
       success: true,
@@ -366,143 +414,6 @@ exports.extractPdfText = functions.https.onCall(async (data, context) => {
   }
 });
 
-/**
- * Generates grade predictions using OpenAI based on processed document data.
- * Analyzes syllabus, transcript, and other documents to predict academic performance.
- *
- * @param {Object} data - Empty object (uses stored document data)
- * @param {Object} context - The Firebase function context
- * @param {Object} context.auth - Authentication details of the requesting user
- * @returns {Promise<Object>} Object containing prediction results
- * @throws {functions.https.HttpsError} If prediction fails or no processed documents found
- */
-exports.predictGrades = functions.https.onCall(async (data, context) => {
-  try {
-    console.log('predictGrades called with data:', JSON.stringify(data));
-    
-    // Ensure user is authenticated
-    if (!context.auth) {
-      console.error('Authentication required for predictGrades');
-      throw new functions.https.HttpsError(
-        'unauthenticated',
-        'User must be authenticated'
-      );
-    }
-    
-    const userId = context.auth.uid;
-    console.log(`Starting grade prediction for user ${userId}`);
-    
-    // Get all processed documents
-    const db = admin.firestore();
-    const documentsRef = db.collection('users').doc(userId).collection('documents');
-    const snapshot = await documentsRef.where('status', '==', 'processed').get();
-    
-    const structuredData = { 
-      syllabus: null,
-      grades: null,
-      transcript: null
-    };
-    const rawDocs = {};
-    const documentIds = [];
-    
-    // First try to get structured data from documents
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      documentIds.push(doc.id);
-      
-      if (data.specialized_data && data.documentType) {
-        structuredData[data.specialized_data.type] = data.specialized_data.data;
-      } else if (data.text) {
-        rawDocs[data.documentType] = data.text;
-      }
-    });
-    
-    // If we don't have structured data, try to process the raw text
-    if (!structuredData.syllabus && !structuredData.grades && !structuredData.transcript) {
-      if (Object.keys(rawDocs).length === 0) {
-        console.log("No processed documents found for prediction");
-        return {
-          success: false,
-          message: "No processed documents found. Please upload and process at least one document."
-        };
-      }
-      
-      // Process the extracted text to structured data
-      console.log("Processing extracted text to structured data");
-      const processedData = await processExtractedText(rawDocs);
-      console.log("Processed data:", JSON.stringify(processedData));
-      
-      // Update structuredData with processed data
-      Object.assign(structuredData, processedData);
-    }
-    
-    // Combine data for calculations (use grades or transcript)
-    const calculationData = {
-      syllabus: structuredData.syllabus,
-      grades: structuredData.grades || structuredData.transcript
-    };
-    
-    // Calculate grade statistics
-    console.log("Calculating grade statistics");
-    const gradeStats = calculateGradeStatistics(calculationData);
-    console.log("Grade statistics:", JSON.stringify(gradeStats));
-    
-    // Generate prediction based on structured data and calculated stats
-    console.log("Generating prediction");
-    let aiPrediction = null;
-    try {
-      aiPrediction = await generatePrediction(structuredData);
-      console.log("AI Prediction result:", JSON.stringify(aiPrediction));
-    } catch (predictionError) {
-      console.error(`Error generating AI prediction: ${predictionError}`);
-      console.error(`Error stack: ${predictionError.stack}`);
-      // Continue without AI prediction
-    }
-    
-    // Combine stats and AI prediction
-    const combinedPrediction = {
-      grade: gradeStats.current_grade,
-      current_percentage: gradeStats.current_percentage,
-      letter_grade: gradeStats.letter_grade,
-      max_possible_grade: gradeStats.max_possible_grade,
-      min_possible_grade: gradeStats.min_possible_grade,
-      reasoning: gradeStats.analysis,
-      ai_prediction: aiPrediction,
-      categorized_grades: gradeStats.categorized_grades
-    };
-    
-    console.log("Combined prediction:", JSON.stringify(combinedPrediction));
-    
-    // Store prediction
-    const predictionRef = db.collection('users').doc(userId).collection('predictions').doc();
-    const predictionData = {
-      prediction: combinedPrediction,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      documentIds: documentIds,
-      calculatedStats: gradeStats,
-      structured_data: structuredData
-    };
-    
-    console.log("Storing prediction in Firestore");
-    await predictionRef.set(predictionData);
-    
-    console.log("Grade prediction completed successfully");
-    
-    return {
-      success: true,
-      prediction: combinedPrediction,
-      message: "Grade prediction completed successfully"
-    };
-  } catch (error) {
-    console.error(`Error in predictGrades: ${error}`);
-    console.error(`Error stack: ${error.stack}`);
-    throw new functions.https.HttpsError(
-      'internal',
-      `Error predicting grade: ${error.message}`,
-      { detailedError: error.toString() }
-    );
-  }
-});
 
 /**
  * Internal helper function to extract text content from a PDF file.
@@ -558,58 +469,23 @@ async function extractTextFromPdf(userId, documentId, filePath) {
     await docRef.set({
       text: extractedText,
       lastExtracted: admin.firestore.FieldValue.serverTimestamp(),
-      status: 'extracting',
+      status: 'extracted',
       pageCount: pdfData.numpages
     }, { merge: true });
     
-    // Now process the extracted text into structured data
-    console.log(`Processing extracted text into structured data`);
-    try {
-      // Get the document type from the document
-      const docData = await docRef.get();
-      const documentType = docData.data().documentType;
-      
-      // Create a docs object for processing
-      const docs = {};
-      docs[documentType] = extractedText;
-      
-      // Process the text
-      const structuredData = await processExtractedText(docs);
-      
-      // Update the document with structured data
-      console.log(`Updating document with structured data`);
-      await docRef.set({
-        structured_data: structuredData[documentType] || null,
-        status: 'processed'
-      }, { merge: true });
-      
-      // Store specialized data directly in the main document
-      if (documentType === 'syllabus' && structuredData.syllabus) {
-        await docRef.set({
-          specialized_data: {
-            type: 'syllabus',
-            data: structuredData.syllabus
-          }
-        }, { merge: true });
-      } else if ((documentType === 'transcript' || documentType === 'grades') && structuredData[documentType]) {
-        await docRef.set({
-          specialized_data: {
-            type: documentType,
-            data: structuredData[documentType]
-          }
-        }, { merge: true });
+    // Check if we have enough documents to format data
+    const documentsRef = db.collection('users').doc(userId).collection('documents');
+    const extractedDocs = await documentsRef.where('status', '==', 'extracted').get();
+    
+    if (!extractedDocs.empty) {
+      // Try to format the documents
+      try {
+        console.log('Attempting to format documents after extraction');
+        await formatDocumentsData(userId);
+      } catch (formatError) {
+        console.error('Error formatting documents:', formatError);
+        // Continue without failing the function
       }
-      
-      console.log(`Successfully processed and stored structured data for ${documentType}`);
-    } catch (processError) {
-      console.error(`Error processing extracted text: ${processError}`);
-      console.error(`Error stack: ${processError.stack}`);
-      
-      // Update status to indicate processing error but text extraction succeeded
-      await docRef.set({
-        status: 'extract_only',
-        processError: processError.message
-      }, { merge: true });
     }
     
     console.log(`Firestore document updated successfully`);

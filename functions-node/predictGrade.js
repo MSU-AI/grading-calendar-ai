@@ -1,7 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const OpenAI = require('openai');
-const { formatDataForCalculation } = require('./formatDocumentData');
 
 /**
  * Cloud Function to predict final grade using AI
@@ -36,9 +35,8 @@ exports.predictFinalGrade = functions.https.onCall(async (data, context) => {
     if (data.currentCalculation) {
       currentCalculation = data.currentCalculation;
     } else {
-      // Format data and calculate - Now await the async formatting
-      const formattedData = await formatDataForCalculation(structuredData);
-      currentCalculation = calculateExactGradeStatistics(formattedData);
+      // Calculate using the formatted data directly
+      currentCalculation = calculateExactGradeStatistics(structuredData);
     }
     
     // Format data for AI prediction
@@ -70,20 +68,16 @@ exports.predictFinalGrade = functions.https.onCall(async (data, context) => {
  * @returns {Object} Formatted data for AI prompt
  */
 function formatDataForAIPrediction(structuredData, currentCalculation) {
-  const syllabus = structuredData.syllabus || {};
-  const transcript = structuredData.transcript || {};
-  const grades = structuredData.grades || {};
-  
   return {
     // Course information
-    course: {
-      name: syllabus.course_name || "Unknown Course",
-      instructor: syllabus.instructor || "Unknown Instructor",
-      creditHours: syllabus.credit_hours || "3"
+    course: structuredData.course || {
+      name: "Unknown Course",
+      instructor: "Unknown Instructor",
+      creditHours: "3"
     },
     
     // Grade weights
-    gradeWeights: syllabus.grade_weights || [],
+    gradeWeights: structuredData.gradeWeights || [],
     
     // Current performance
     currentPerformance: {
@@ -97,14 +91,13 @@ function formatDataForAIPrediction(structuredData, currentCalculation) {
     categories: currentCalculation.categorized_grades,
     
     // Previous academic history
-    academicHistory: {
-      overall_gpa: transcript.overall_gpa || grades.overall_gpa || "Unknown",
-      term_gpa: transcript.term_gpa || grades.term_gpa || "Unknown",
-      previous_courses: transcript.courses || []
+    academicHistory: structuredData.academicHistory || {
+      overall_gpa: structuredData.gpa || "Unknown",
+      relevantCourses: []
     },
     
     // Due dates and upcoming assignments
-    dueDates: syllabus.due_dates || [],
+    dueDates: structuredData.dueDates || [],
     
     // Request format version (for future compatibility)
     formatVersion: "1.0"
@@ -151,8 +144,8 @@ Overall GPA: ${data.academicHistory.overall_gpa}
 Term GPA: ${data.academicHistory.term_gpa}
 
 Previous Related Courses:
-${(data.academicHistory.previous_courses || []).map(c => 
-  `- ${c.course_code}: ${c.grade}`
+${(data.academicHistory.relevantCourses || []).map(c => 
+  `- ${c.course_code}: ${c.grade} (${c.relevance} relevance)`
 ).join('\n') || "None available"}
 
 RESPOND ONLY WITH VALID JSON IN THIS EXACT FORMAT:
@@ -281,56 +274,41 @@ function getOpenAIApiKey() {
  * @returns {Promise<Object>} Structured data
  */
 async function fetchStructuredDataFromFirestore(userId) {
-  // Same implementation as in calculateGrade.js
-  // Duplicated here to avoid circular dependencies
-  console.log(`Fetching structured data for user ${userId}`);
+  console.log(`Fetching formatted data for user ${userId}`);
   const db = admin.firestore();
-  const structuredData = {};
   
   try {
-    // Fetch latest syllabus
-    const syllabusQuery = db.collection('users').doc(userId)
-      .collection('documents')
-      .where('documentType', '==', 'syllabus')
-      .where('status', '==', 'processed')
-      .orderBy('uploadedAt', 'desc')
-      .limit(1);
+    // Fetch the unified formatted data
+    const formattedDataDoc = await db.collection('users').doc(userId)
+      .collection('data').doc('formatted_data').get();
     
-    const syllabusSnapshot = await syllabusQuery.get();
-    
-    if (!syllabusSnapshot.empty) {
-      const syllabusDoc = syllabusSnapshot.docs[0];
-      const syllabusData = syllabusDoc.data();
+    if (!formattedDataDoc.exists) {
+      console.log('No formatted data found, checking for documents that need formatting');
       
-      if (syllabusData.specialized_data && syllabusData.specialized_data.data) {
-        structuredData.syllabus = syllabusData.specialized_data.data;
-      } else if (syllabusData.structured_data) {
-        structuredData.syllabus = syllabusData.structured_data;
+      // Check if we have documents that need formatting
+      const documentsRef = db.collection('users').doc(userId).collection('documents');
+      const extractedDocs = await documentsRef.where('status', '==', 'extracted').get();
+      
+      if (!extractedDocs.empty) {
+        console.log('Found extracted documents, triggering formatting');
+        // Import the formatDocumentsData function dynamically to avoid circular dependencies
+        const { formatDocumentsData } = require('./formatDocumentsData');
+        
+        // Format the documents
+        const formattedData = await formatDocumentsData(userId);
+        
+        if (formattedData) {
+          console.log('Successfully formatted documents');
+          return formattedData;
+        }
       }
+      
+      throw new Error('No formatted data available. Please upload and process documents first.');
     }
     
-    // Fetch latest grades
-    const gradesQuery = db.collection('users').doc(userId)
-      .collection('documents')
-      .where('documentType', 'in', ['grades', 'transcript'])
-      .where('status', '==', 'processed')
-      .orderBy('uploadedAt', 'desc')
-      .limit(1);
-    
-    const gradesSnapshot = await gradesQuery.get();
-    
-    if (!gradesSnapshot.empty) {
-      const gradesDoc = gradesSnapshot.docs[0];
-      const gradesData = gradesDoc.data();
-      
-      if (gradesData.specialized_data && gradesData.specialized_data.data) {
-        structuredData[gradesData.documentType] = gradesData.specialized_data.data;
-      } else if (gradesData.structured_data) {
-        structuredData[gradesData.documentType] = gradesData.structured_data;
-      }
-    }
-    
-    return structuredData;
+    // Return the formatted data
+    const data = formattedDataDoc.data();
+    return data.formatted_data;
   } catch (error) {
     console.error(`Error fetching structured data: ${error}`);
     throw error;

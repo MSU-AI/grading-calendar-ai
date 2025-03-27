@@ -13,8 +13,8 @@ export interface GradeCalculationResult {
     min_possible_grade: number;
     categorized_grades: {
       [category: string]: {
-        completed: Array<{ name: string; grade: number }>;
-        remaining: string[];
+        completed: Array<{ name: string; grade: number; maxPoints?: number; category: string }>;
+        remaining: Array<{ name: string; category: string }>;
         average: number | null;
         totalPoints: number;
         maxPoints: number;
@@ -23,7 +23,41 @@ export interface GradeCalculationResult {
     };
     analysis: string;
   };
-  formatted_data?: any;
+  formatted_data?: {
+    course: {
+      name: string;
+      instructor: string;
+      creditHours: string;
+    };
+    gradeWeights: Array<{
+      name: string;
+      weight: number;
+    }>;
+    completedAssignments: Array<{
+      name: string;
+      grade: number;
+      maxPoints: number;
+      category: string;
+    }>;
+    remainingAssignments: Array<{
+      name: string;
+      category: string;
+    }>;
+    dueDates: Array<{
+      assignment: string;
+      due_date: string;
+    }>;
+    gpa: string;
+    academicHistory?: {
+      relevantCourses: Array<{
+        course_code: string;
+        course_name: string;
+        grade: string;
+        numerical_grade: number;
+        relevance: string;
+      }>;
+    };
+  };
   message?: string;
 }
 
@@ -32,7 +66,6 @@ export interface GradePredictionResult {
   success: boolean;
   prediction: {
     grade: number;
-    numerical_grade: number;
     letter_grade: string;
     current_percentage: number;
     max_possible_grade: number;
@@ -45,8 +78,8 @@ export interface GradePredictionResult {
     };
     categorized_grades: {
       [category: string]: {
-        completed: Array<{ name: string; grade: number }>;
-        remaining: string[];
+        completed: Array<{ name: string; grade: number; maxPoints?: number; category: string }>;
+        remaining: Array<{ name: string; category: string }>;
         average: number | null;
       };
     };
