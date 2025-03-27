@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getFunctions } from 'firebase/functions';
 import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { calculateCurrentGrade, predictFinalGrade } from '../services/gradeService';
 import DocumentProcessingStatus from './DocumentProcessingStatus';
