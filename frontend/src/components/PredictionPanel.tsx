@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getFunctions } from 'firebase/functions';
 import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { calculateCurrentGrade, predictFinalGrade } from '../services/gradeService';
 import DocumentProcessingStatus from './DocumentProcessingStatus';
@@ -36,12 +36,11 @@ const PredictionPanel: React.FC = () => {
   const { currentUser } = useAuth();
   const [isPredicting, setIsPredicting] = useState<boolean>(false);
   const [predictionResult, setPredictionResult] = useState<Prediction | null>(null);
-  const [documents, setDocuments] = useState<Document[]>([]);
+  const [documents] = useState<Document[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   const [processingComplete, setProcessingComplete] = useState<boolean>(false);
   
-  const functions = getFunctions();
   const db = getFirestore();
 
   // Listen for documents and predictions
@@ -130,11 +129,12 @@ const PredictionPanel: React.FC = () => {
   // Determine if we can make a prediction based on document status or processing completion
   const canPredict = documents.some(doc => doc.status === 'processed') || processingComplete;
   
+  // We'll keep this comment to document what we're calculating, but remove the unused variable
   // Get count of documents by type
-  const docCounts = documents.reduce((acc: Record<string, number>, doc) => {
-    acc[doc.documentType] = (acc[doc.documentType] || 0) + 1;
-    return acc;
-  }, {});
+  // const docCounts = documents.reduce((acc: Record<string, number>, doc) => {
+  //   acc[doc.documentType] = (acc[doc.documentType] || 0) + 1;
+  //   return acc;
+  // }, {});
 
   return (
     <div style={styles.container}>

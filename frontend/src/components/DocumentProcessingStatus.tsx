@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getFirestore, collection, query, where, onSnapshot, doc } from 'firebase/firestore';
+import { getFirestore, collection, query, onSnapshot, doc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
 interface Document {
@@ -71,7 +71,8 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
 
   // Check if we have the minimum required documents
   const hasSyllabus = documentTypeCount.syllabus > 0;
-  const hasGradesOrTranscript = documentTypeCount.transcript > 0 || documentTypeCount.grades > 0;
+  // We'll keep this comment to document what we're checking, but remove the unused variable
+  // const hasGradesOrTranscript = documentTypeCount.transcript > 0 || documentTypeCount.grades > 0;
   const hasMinimumDocuments = hasSyllabus;
 
   // Handle manual formatting
@@ -144,7 +145,8 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
 
   const progress = calculateProgress();
   const canFormat = documentCounts.extracted > 0 && !isFormatting;
-  const hasErrors = documentCounts.error > 0;
+  // We'll keep this comment to document what we're checking, but remove the unused variable
+  // const hasErrors = documentCounts.error > 0;
 
   return (
     <div style={styles.container}>
