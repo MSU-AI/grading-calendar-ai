@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import DocumentProcessingStatus from './DocumentProcessingStatus';
+import DOCUMENT_TYPES, { DocumentType } from '../constants/documentTypes';
 
 interface Document {
   id: string;
-  documentType: string;
+  documentType: DocumentType;
   status: string;
   uploadedAt: any;
   filePath: string;
@@ -73,16 +74,16 @@ const DocumentManager: React.FC = () => {
             try {
               const base64String = fileReader.result as string;
               
-              // Determine document type based on file name (simple heuristic)
+              // Determine document type based on file name using constants
               const fileName = file.name.toLowerCase();
-              let documentType = 'other';
+              let documentType: DocumentType = DOCUMENT_TYPES.OTHER;
               
               if (fileName.includes('syllabus')) {
-                documentType = 'syllabus';
+                documentType = DOCUMENT_TYPES.SYLLABUS as DocumentType;
               } else if (fileName.includes('transcript')) {
-                documentType = 'transcript';
+                documentType = DOCUMENT_TYPES.TRANSCRIPT as DocumentType;
               } else if (fileName.includes('grade')) {
-                documentType = 'grades';
+                documentType = DOCUMENT_TYPES.GRADES as DocumentType;
               }
               
               // Upload document

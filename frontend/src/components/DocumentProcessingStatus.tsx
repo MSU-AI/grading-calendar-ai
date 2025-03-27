@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFirestore, collection, query, onSnapshot, doc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import DOCUMENT_TYPES, { DocumentType } from '../constants/documentTypes';
 
 interface Document {
   id: string;
-  documentType: string;
+  documentType: DocumentType;
   status: string;
   name: string;
   error?: string;
 }
+
 
 interface DocumentProcessingStatusProps {
   onProcessingComplete?: () => void;
@@ -62,17 +64,15 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     error: documents.filter(doc => doc.status === 'error').length
   };
 
-  // Count documents by type
+  // Count documents by type (case-insensitive)
   const documentTypeCount = {
-    syllabus: documents.filter(doc => doc.documentType === 'syllabus').length,
-    transcript: documents.filter(doc => doc.documentType === 'transcript').length,
-    grades: documents.filter(doc => doc.documentType === 'grades').length
+    syllabus: documents.filter(doc => doc.documentType.toLowerCase() === DOCUMENT_TYPES.SYLLABUS).length,
+    transcript: documents.filter(doc => doc.documentType.toLowerCase() === DOCUMENT_TYPES.TRANSCRIPT).length,
+    grades: documents.filter(doc => doc.documentType.toLowerCase() === DOCUMENT_TYPES.GRADES).length
   };
 
-  // Check if we have the minimum required documents
-  const hasSyllabus = documentTypeCount.syllabus > 0;
-  // We'll keep this comment to document what we're checking, but remove the unused variable
-  // const hasGradesOrTranscript = documentTypeCount.transcript > 0 || documentTypeCount.grades > 0;
+  // Check if we have the minimum required documents (case-insensitive)
+  const hasSyllabus = documents.some(doc => doc.documentType.toLowerCase() === DOCUMENT_TYPES.SYLLABUS);
   const hasMinimumDocuments = hasSyllabus;
 
   // Handle manual formatting

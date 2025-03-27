@@ -1,6 +1,7 @@
 const OpenAI = require('openai');
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { DOCUMENT_TYPES, normalizeDocumentType } = require('./constants/documentTypes');
 
 /**
  * Formats all document data using a single OpenAI API call to ensure consistent structure
@@ -41,11 +42,21 @@ exports.formatDocumentsData = async (userId) => {
     
     console.log(`Found documents by type: ${Object.keys(documentsByType).join(', ')}`);
     
-    // Check if we have the minimum required documents (syllabus)
-    if (!documentsByType.syllabus) {
+    // Check if we have the minimum required documents (syllabus) - case insensitive
+    const hasSyllabus = Object.entries(documentsByType).some(([type]) => 
+      normalizeDocumentType(type) === DOCUMENT_TYPES.SYLLABUS
+    );
+    
+    if (!hasSyllabus) {
       console.log('No syllabus document found, cannot format data');
+      console.log('Available types:', Object.keys(documentsByType));
       return null;
     }
+
+    // Get the syllabus document using case-insensitive comparison
+    const syllabusDoc = Object.entries(documentsByType).find(([type]) => 
+      normalizeDocumentType(type) === DOCUMENT_TYPES.SYLLABUS
+    )?.[1];
     
     // Get OpenAI API key
     const apiKey = getOpenAIApiKey();
@@ -225,16 +236,33 @@ async function updateDocumentStatus(userId, documents) {
   const db = admin.firestore();
   const batch = db.batch();
   
+  let updateCount = 0;
+  
   documents.forEach(doc => {
     const docRef = db.collection('users').doc(userId).collection('documents').doc(doc.id);
-    batch.update(docRef, { 
-      status: 'processed',
-      processedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    const docData = doc.data();
+    
+    // Only update documents that are in 'extracted' status
+    if (docData.status === 'extracted') {
+      batch.update(docRef, { 
+        status: 'processed',
+        processedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      updateCount++;
+      console.log(`Marking document ${doc.id} as processed`);
+    } else {
+      console.log(`Skipping document ${doc.id} with status ${docData.status}`);
+    }
   });
   
-  await batch.commit();
-  console.log('Successfully updated document statuses');
+  if (updateCount > 0) {
+    await batch.commit();
+    console.log(`Successfully updated ${updateCount} document statuses to processed`);
+    return true;
+  } else {
+    console.log('No documents to update');
+    return false;
+  }
 }
 
 /**

@@ -7,6 +7,7 @@ const OpenAI = require('openai');
 const { calculateCurrentGrade } = require('./calculateGrade');
 const { predictFinalGrade } = require('./predictGrade');
 const { formatDocumentsData } = require('./formatDocumentsData');
+const { DOCUMENT_TYPES, normalizeDocumentType } = require('./constants/documentTypes');
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -72,7 +73,9 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
       throw new functions.https.HttpsError('invalid-argument', 'Missing document data or type');
     }
 
-    const documentName = data.documentName || `${data.documentType}_${Date.now()}.pdf`;
+    // Normalize document type
+    const normalizedDocType = normalizeDocumentType(data.documentType);
+    const documentName = data.documentName || `${normalizedDocType}_${Date.now()}.pdf`;
     
     let base64Data = data.documentBase64;
     if (base64Data.includes('base64,')) {
@@ -90,7 +93,7 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
       // Get default bucket
       const bucket = admin.storage().bucket();
       // Use consistent path format for the trigger to work properly
-      const filePath = `users/${userId}/${data.documentType}/${documentName}`;
+      const filePath = `users/${userId}/${normalizedDocType}/${documentName}`;
       
       console.log(`Uploading to Firebase Storage: ${filePath}`);
       await bucket.upload(tempFile.name, {
@@ -112,7 +115,7 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
       
       await docRef.set({
         filePath: filePath,
-        documentType: data.documentType,
+        documentType: normalizedDocType,
         name: documentName,
         uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
         status: 'uploaded'
@@ -404,19 +407,21 @@ async function extractTextFromPdf(userId, documentId, filePath) {
     
     console.log(`Firestore document updated successfully`);
     
-    // Try to trigger document formatting if multiple documents are extracted
+    // Always try to format documents after successful extraction
     try {
-      const documentsRef = db.collection('users').doc(userId).collection('documents');
-      const extractedDocs = await documentsRef.where('status', '==', 'extracted').get();
+      console.log('Document extracted successfully, triggering format operation');
+      const { formatDocumentsData } = require('./formatDocumentsData');
       
-      if (!extractedDocs.empty && extractedDocs.size >= 1) {
-        console.log('Multiple extracted documents found, attempting to format');
-        const formatDocumentsData = require('./formatDocumentsData').formatDocumentsData;
-        await formatDocumentsData(userId);
+      // Attempt to format documents immediately after extraction
+      const formatResult = await formatDocumentsData(userId);
+      if (formatResult) {
+        console.log('Document formatting completed successfully');
+      } else {
+        console.log('Document formatting was not performed or failed');
       }
     } catch (formatError) {
-      console.warn('Non-fatal error during document formatting:', formatError);
-      // This is non-fatal, continue without failing
+      console.warn('Error during document formatting, but continuing:', formatError);
+      // Non-fatal error, continue with extraction success
     }
     
     return extractedText;
