@@ -30,11 +30,21 @@ exports.calculateCurrentGrade = functions.https.onCall(async (data, context) => 
       );
     }
     
-    // Format data into a consistent structure
-    const formattedData = formatDataForCalculation(structuredData);
+    // Format data - Note this is now awaited as it's async
+    const formattedData = await formatDataForCalculation(structuredData);
     
-    // Calculate grades
-    const gradeStats = calculateExactGradeStatistics(formattedData);
+    // Extract only the parts needed for grade calculation
+    const calculationData = {
+      course: formattedData.course,
+      gradeWeights: formattedData.gradeWeights,
+      completedAssignments: formattedData.completedAssignments,
+      remainingAssignments: formattedData.remainingAssignments,
+      dueDates: formattedData.dueDates,
+      gpa: formattedData.gpa
+    };
+    
+    // Calculate grades using only the relevant subset of data
+    const gradeStats = calculateExactGradeStatistics(calculationData);
     
     // Optionally store calculation result
     if (data.storeResult === true) {

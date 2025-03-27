@@ -36,8 +36,8 @@ exports.predictFinalGrade = functions.https.onCall(async (data, context) => {
     if (data.currentCalculation) {
       currentCalculation = data.currentCalculation;
     } else {
-      // Format data and calculate
-      const formattedData = formatDataForCalculation(structuredData);
+      // Format data and calculate - Now await the async formatting
+      const formattedData = await formatDataForCalculation(structuredData);
       currentCalculation = calculateExactGradeStatistics(formattedData);
     }
     

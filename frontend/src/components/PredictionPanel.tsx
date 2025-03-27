@@ -112,6 +112,13 @@ const PredictionPanel: React.FC = () => {
         throw new Error(predictionResult.message || 'Failed to generate prediction');
       }
       
+      // Make sure we have valid data before setting state
+      if (!predictionResult.prediction || 
+          !predictionResult.prediction.categorized_grades ||
+          typeof predictionResult.prediction.current_percentage !== 'number') {
+        throw new Error('Received invalid prediction data format');
+      }
+      
       setPredictionResult(predictionResult.prediction);
       setStatus('Prediction generated successfully!');
     } catch (error: any) {
@@ -182,17 +189,17 @@ const PredictionPanel: React.FC = () => {
         )}
       </div>
 
-      {predictionResult && (
+      {predictionResult && predictionResult.categorized_grades && (
         <div style={styles.predictionResult}>
           <h3>Prediction Result</h3>
           <div style={styles.gradeDisplay}>
             <div style={styles.gradeCircle}>
-              {predictionResult.letter_grade}
+              {predictionResult.letter_grade || 'N/A'}
             </div>
             <div style={styles.gradePercentage}>
               {typeof predictionResult.current_percentage === 'number' 
                 ? `${predictionResult.current_percentage.toFixed(1)}%`
-                : predictionResult.current_percentage}
+                : 'N/A'}
             </div>
             <div style={styles.gradeLabel}>Current Grade</div>
           </div>
@@ -202,22 +209,30 @@ const PredictionPanel: React.FC = () => {
             <div style={styles.gradeRange}>
               <div style={styles.rangeItem}>
                 <span style={styles.rangeLabel}>Minimum:</span>
-                <span style={styles.rangeValue}>{predictionResult.min_possible_grade.toFixed(1)}%</span>
+                <span style={styles.rangeValue}>
+                  {typeof predictionResult.min_possible_grade === 'number' 
+                    ? `${predictionResult.min_possible_grade.toFixed(1)}%` 
+                    : 'N/A'}
+                </span>
               </div>
               <div style={styles.rangeItem}>
                 <span style={styles.rangeLabel}>Maximum:</span>
-                <span style={styles.rangeValue}>{predictionResult.max_possible_grade.toFixed(1)}%</span>
+                <span style={styles.rangeValue}>
+                  {typeof predictionResult.max_possible_grade === 'number' 
+                    ? `${predictionResult.max_possible_grade.toFixed(1)}%` 
+                    : 'N/A'}
+                </span>
               </div>
             </div>
           </div>
           
           <div style={styles.reasoningSection}>
             <h4>Analysis</h4>
-            <p style={styles.reasoning}>{predictionResult.reasoning}</p>
+            <p style={styles.reasoning}>{predictionResult.reasoning || 'No analysis available'}</p>
             {predictionResult.ai_prediction && (
               <div style={styles.aiPrediction}>
                 <h4>AI Prediction</h4>
-                <p>{predictionResult.ai_prediction.reasoning}</p>
+                <p>{predictionResult.ai_prediction.reasoning || 'No AI reasoning available'}</p>
               </div>
             )}
           </div>
@@ -227,13 +242,13 @@ const PredictionPanel: React.FC = () => {
             {Object.entries(predictionResult.categorized_grades).map(([category, data]) => (
               <div key={category} style={styles.categoryItem}>
                 <h5 style={styles.categoryTitle}>{category}</h5>
-                {data.average !== null && (
+                {data && data.average !== null && (
                   <div style={styles.categoryStats}>
                     <span style={styles.categoryAverage}>
                       Average: {data.average.toFixed(1)}%
                     </span>
                     <span style={styles.categoryProgress}>
-                      Progress: {data.completed.length} completed, {data.remaining.length} remaining
+                      Progress: {data.completed?.length || 0} completed, {data.remaining?.length || 0} remaining
                     </span>
                   </div>
                 )}
@@ -241,6 +256,11 @@ const PredictionPanel: React.FC = () => {
             ))}
           </div>
         </div>
+      )}
+      
+      {/* Show a message if prediction failed but we're not in predicting state */}
+      {!predictionResult && !isPredicting && !error && (
+        <p style={styles.noDocumentsMessage}>No prediction data available. Try generating a prediction.</p>
       )}
     </div>
   );

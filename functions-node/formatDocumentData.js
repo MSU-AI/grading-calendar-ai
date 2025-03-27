@@ -1,95 +1,137 @@
+const OpenAI = require('openai');
+
 /**
- * Formats extracted data from documents into a standardized structure for grade calculations
+ * Formats document data using OpenAI API to ensure consistent structure
  * @param {Object} structuredData - Raw structured data from documents
- * @returns {Object} Formatted data for calculations
+ * @returns {Promise<Object>} Formatted data for calculations
  */
-exports.formatDataForCalculation = (structuredData) => {
-  console.log('Formatting document data for calculation');
+exports.formatDataForCalculation = async (structuredData) => {
+  console.log('Formatting document data for calculation using OpenAI');
   
   try {
-    // Extract data from inputs
+    // Get OpenAI API key
+    const apiKey = getOpenAIApiKey();
+    
+    // Initialize OpenAI client
+    const openai = new OpenAI({
+      apiKey: apiKey
+    });
+    
+    // Extract the syllabus and grades data (if available)
     const syllabus = structuredData.syllabus || {};
-    const gradesData = structuredData.grades || structuredData.transcript || {};
+    const grades = structuredData.grades || {};
+    const transcript = structuredData.transcript || {};
     
-    // Format grade weights
-    const gradeWeights = (syllabus.grade_weights || []).map(weight => ({
-      name: weight.name,
-      weight: typeof weight.weight === 'number' ? weight.weight : parseFloat(weight.weight) / 100
-    }));
-    
-    // Normalize weights to ensure they sum to 1
-    const totalWeight = gradeWeights.reduce((sum, w) => sum + w.weight, 0);
-    if (totalWeight > 0 && Math.abs(totalWeight - 1.0) > 0.01) {
-      gradeWeights.forEach(w => {
-        w.weight = w.weight / totalWeight;
-      });
+    // Create a prompt with the raw data
+    const prompt = `
+I need you to format educational document data into a consistent structure for grade calculations.
+Here is the raw data:
+
+SYLLABUS DATA:
+${JSON.stringify(syllabus, null, 2)}
+
+GRADES DATA:
+${JSON.stringify(grades, null, 2)}
+
+TRANSCRIPT DATA:
+${JSON.stringify(transcript, null, 2)}
+
+Please format this data into the following exact JSON structure:
+{
+  "course": {
+    "name": "Course name from syllabus",
+    "instructor": "Instructor name from syllabus",
+    "creditHours": "Credit hours as string"
+  },
+  "gradeWeights": [
+    {
+      "name": "Category name (e.g., 'Exams', 'Homework')",
+      "weight": 0.3 // Decimal weight, ensure all weights sum to 1.0
     }
-    
-    // Format completed assignments
-    let completedAssignments = [];
-    
-    // Handle different data structures
-    if (Array.isArray(gradesData)) {
-      // Direct array of grades
-      completedAssignments = gradesData.map(grade => ({
-        name: grade.name || 'Unknown Assignment',
-        grade: grade.grade,
-        maxPoints: 100, // Default
-        category: grade.category || findBestCategory(grade.name, gradeWeights)
-      }));
-    } else if (gradesData.courses) {
-      // Transcript format
-      completedAssignments = (gradesData.courses || [])
-        .filter(course => course.grade && course.course_code)
-        .map(course => ({
-          name: course.course_name || course.course_code,
-          grade: convertLetterGradeToNumber(course.grade),
-          maxPoints: 100,
-          category: 'Transcript'
-        }));
+  ],
+  "completedAssignments": [
+    {
+      "name": "Assignment name",
+      "grade": 95, // Numeric grade
+      "maxPoints": 100, // Maximum possible points
+      "category": "Category name matching a gradeWeight name"
     }
+  ],
+  "remainingAssignments": [
+    {
+      "name": "Assignment name",
+      "category": "Category name matching a gradeWeight name"
+    }
+  ],
+  "dueDates": [
+    {
+      "assignment": "Assignment name",
+      "due_date": "Due date string"
+    }
+  ],
+  "gpa": "Overall GPA as string"
+}
+
+Only include assignments in "remainingAssignments" if they appear in the syllabus but not in the completed grades.
+Ensure that all assignments have a matching category from the grade weights.
+All weights should sum to exactly 1.0.
+`;
+
+    // Call OpenAI API
+    console.log('Calling OpenAI for data formatting');
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { 
+          role: "system", 
+          content: "You are a precise data formatting assistant. You MUST respond with ONLY valid JSON that exactly matches the requested structure. Include NO explanatory text outside the JSON object."
+        },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.1, // Low temperature for consistency
+      response_format: { type: "json_object" } // Enforces JSON response
+    });
     
-    // Format remaining assignments
-    const assignmentNames = new Set(completedAssignments.map(a => a.name.toLowerCase()));
-    const remainingAssignments = (syllabus.assignments || [])
-      .filter(name => !assignmentNames.has(name.toLowerCase()))
-      .map(name => ({
-        name: name,
-        category: findBestCategory(name, gradeWeights)
-      }));
+    // Extract and parse the JSON response
+    const formattedData = JSON.parse(response.choices[0].message.content);
+    console.log('Successfully formatted data with OpenAI');
     
-    // Format due dates
-    const dueDates = (syllabus.due_dates || []).map(dd => ({
-      assignment: dd.assignment,
-      due_date: dd.due_date
-    }));
-    
-    // Return the formatted data
-    return {
-      course: {
-        name: syllabus.course_name || "Unknown Course",
-        instructor: syllabus.instructor || "Unknown Instructor",
-        creditHours: syllabus.credit_hours || "3"
-      },
-      gradeWeights,
-      completedAssignments,
-      remainingAssignments,
-      dueDates,
-      gpa: gradesData.overall_gpa || gradesData.gpa || "3.0"
-    };
+    return formattedData;
   } catch (error) {
-    console.error('Error formatting document data:', error);
-    // Return a default structure
+    console.error('Error formatting data with OpenAI:', error);
+    
+    // Return a fallback format in case of error
     return {
-      course: { name: "Unknown Course", instructor: "Unknown", creditHours: "3" },
-      gradeWeights: [{ name: "Assignments", weight: 1.0 }],
+      course: { 
+        name: structuredData.syllabus?.course_name || "Unknown Course", 
+        instructor: structuredData.syllabus?.instructor || "Unknown Instructor", 
+        creditHours: structuredData.syllabus?.credit_hours || "3" 
+      },
+      gradeWeights: structuredData.syllabus?.grade_weights?.map(w => ({
+        name: w.name,
+        weight: typeof w.weight === 'number' ? w.weight : parseFloat(w.weight) / 100
+      })) || [{ name: "Assignments", weight: 1.0 }],
       completedAssignments: [],
       remainingAssignments: [],
       dueDates: [],
-      gpa: "3.0"
+      gpa: structuredData.transcript?.overall_gpa || structuredData.grades?.overall_gpa || "3.0"
     };
   }
 };
+
+/**
+ * Helper function to get OpenAI API key
+ */
+function getOpenAIApiKey() {
+  const apiKey = process.env.OPENAI_API_KEY || 
+                (functions.config && functions.config().openai && functions.config().openai.apikey);
+  
+  if (!apiKey) {
+    throw new Error('OpenAI API key not configured. Please set OPENAI_API_KEY or firebase config openai.apikey');
+  }
+  
+  return apiKey;
+}
 
 /**
  * Find the best matching category for an assignment name
