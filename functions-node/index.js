@@ -659,136 +659,448 @@ async function processExtractedText(docs) {
     apiKey: apiKey
   });
   
+  // Process syllabus
   if (docs.syllabus) {
-    console.log('Processing syllabus text');
-    try {
-      // Process syllabus text with OpenAI
-      console.log('Calling OpenAI API for syllabus processing');
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: "Extract the following information from this syllabus in JSON format: course_name, instructor, grade_weights (array of {name, weight}), assignments (array), due_dates (array of {assignment, due_date}), credit_hours"
-          },
-          { role: "user", content: docs.syllabus.substring(0, 10000) } // Limit length to avoid token limits
-        ]
-      });
-      
-      const content = response.choices[0].message.content;
-      console.log(`OpenAI response for syllabus: ${content.substring(0, 200)}...`);
-      
-      const syllabusData = JSON.parse(content);
-      structuredData.syllabus = syllabusData;
-      console.log('Successfully parsed syllabus data');
-    } catch (error) {
-      console.error(`Error processing syllabus with OpenAI: ${error}`);
-      console.error(`Error stack: ${error.stack}`);
-      
-      // Provide fallback structured data
-      console.log('Using fallback syllabus data');
-      structuredData.syllabus = {
-        course_name: "Unknown Course",
-        instructor: "Unknown Instructor",
-        grade_weights: [
-          { name: "Assignments", weight: 0.5 },
-          { name: "Exams", weight: 0.5 }
-        ],
-        assignments: ["Unknown Assignments"],
-        due_dates: [],
-        credit_hours: "3"
-      };
-    }
+    structuredData.syllabus = await processSyllabusText(docs.syllabus, openai);
   }
   
+  // Process transcript
   if (docs.transcript) {
-    console.log('Processing transcript text');
-    try {
-      // Process transcript text with OpenAI
-      console.log('Calling OpenAI API for transcript processing');
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: "Extract the following information from this transcript in JSON format: gpa, final_grade"
-          },
-          { role: "user", content: docs.transcript.substring(0, 10000) } // Limit length to avoid token limits
-        ]
-      });
-      
-      const content = response.choices[0].message.content;
-      console.log(`OpenAI response for transcript: ${content.substring(0, 200)}...`);
-      
-      const transcriptData = JSON.parse(content);
-      structuredData.transcript = transcriptData;
-      console.log('Successfully parsed transcript data');
-    } catch (error) {
-      console.error(`Error processing transcript with OpenAI: ${error}`);
-      console.error(`Error stack: ${error.stack}`);
-      
-      // Provide fallback structured data
-      console.log('Using fallback transcript data');
-      structuredData.transcript = {
-        gpa: "3.0",
-        final_grade: "B"
-      };
-    }
+    structuredData.transcript = await processTranscriptText(
+      docs.transcript, 
+      openai, 
+      structuredData.syllabus
+    );
   }
   
+  // Process grades
   if (docs.grades) {
-    console.log('Processing grades text');
-    try {
-      // Process grades text with OpenAI - improved prompt
-      console.log('Calling OpenAI API for grades processing');
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        messages: [
-          {
-            role: "system",
-            content: "Extract current grades from this document in JSON format. Parse the document carefully, looking for assignment names and their corresponding grades. Return an array of objects, each with 'name' and 'grade' properties. For each assignment that has a score, include it as a numeric value. For assignments with 'Dropped!' status, set the grade property to 'Dropped'. Format example: [{\"name\": \"Week 1 HW\", \"grade\": 100}, {\"name\": \"Week 2 HW\", \"grade\": 95.5}, {\"name\": \"Quiz 1\", \"grade\": \"Dropped\"}]"
-          },
-          { role: "user", content: docs.grades.substring(0, 10000) } // Limit length to avoid token limits
-        ]
-      });
-      
-      const content = response.choices[0].message.content;
-      console.log(`OpenAI response for grades: ${content.substring(0, 200)}...`);
-      
-      // Try to parse JSON response, but handle cases where the response might not be valid JSON
-      try {
-        const gradesData = JSON.parse(content);
-        structuredData.grades = gradesData;
-        console.log('Successfully parsed grades data');
-      } catch (parseError) {
-        console.error(`Failed to parse grades JSON: ${parseError}`);
-        // Try to extract JSON from the response (sometimes OpenAI adds explanatory text)
-        const jsonMatch = content.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          try {
-            const gradesData = JSON.parse(jsonMatch[0]);
-            structuredData.grades = gradesData;
-            console.log('Successfully parsed grades data from extracted JSON');
-          } catch (nestedError) {
-            console.error(`Failed to parse extracted JSON: ${nestedError}`);
-            structuredData.grades = [];
-          }
-        } else {
-          structuredData.grades = [];
-        }
-      }
-    } catch (error) {
-      console.error(`Error processing grades with OpenAI: ${error}`);
-      console.error(`Error stack: ${error.stack}`);
-      
-      // Provide fallback structured data
-      console.log('Using fallback grades data');
-      structuredData.grades = [];
-    }
+    structuredData.grades = await processGradesText(
+      docs.grades, 
+      openai, 
+      structuredData.syllabus
+    );
   }
   
   console.log('Finished processing extracted text');
   return structuredData;
+}
+
+/**
+ * Process syllabus text into structured data with improved prompts and fallbacks.
+ * 
+ * @param {string} syllabusText - Raw text extracted from syllabus PDF
+ * @param {OpenAI} openai - Initialized OpenAI client
+ * @returns {Promise<Object>} Structured syllabus data
+ */
+async function processSyllabusText(syllabusText, openai) {
+  console.log('Processing syllabus text');
+  try {
+    // Find and prioritize the grading section
+    const gradingSection = findGradingSection(syllabusText);
+    let processText = syllabusText;
+    
+    if (gradingSection) {
+      console.log('Found grading section, prioritizing it in the prompt');
+      // Put the grading section at the beginning of the text
+      processText = gradingSection + "\n\n" + 
+                  syllabusText.replace(gradingSection, "");
+    }
+    
+    // Improved prompt for syllabus
+    const syllabusPrompt = `Carefully analyze this syllabus document and extract ONLY the following information in valid JSON format:
+{
+  "course_name": "The full course name and number, e.g. PHY 184 - Electricity and Magnetism",
+  "instructor": "The primary instructor's name",
+  "grade_weights": [
+    {"name": "The exact category name, e.g. 'Weekly Homework'", "weight": 0.28},
+    {"name": "Another category, e.g. 'Exams'", "weight": 0.30}
+  ],
+  "assignments": ["List of all assignments mentioned"],
+  "due_dates": [
+    {"assignment": "Assignment name", "due_date": "Date mentioned"}
+  ],
+  "credit_hours": "The number of credit hours as a string"
+}
+
+First search for sections labeled "Grading", "Grade Breakdown", "Assessment", "Evaluation", or similar. Look for percentages next to categories. Convert all percentages to decimal values (e.g., 30% becomes 0.30). Ensure all weights add up to exactly 1.0.`;
+    
+    // Call OpenAI with improved prompt and larger token limit
+    console.log('Calling OpenAI API for syllabus processing');
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // Keep the same model as before
+      messages: [
+        { role: "system", content: syllabusPrompt },
+        { role: "user", content: processText.substring(0, 16000) } // Increased token limit
+      ],
+      temperature: 0.3 // Lower temperature for more deterministic results
+    });
+    
+    const content = response.choices[0].message.content;
+    console.log(`OpenAI response for syllabus: ${content.substring(0, 200)}...`);
+    
+    // Parse JSON response
+    let syllabusData;
+    try {
+      syllabusData = JSON.parse(content);
+    } catch (jsonError) {
+      // Try to extract JSON from possible text response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          syllabusData = JSON.parse(jsonMatch[0]);
+        } catch (nestedError) {
+          throw nestedError;
+        }
+      } else {
+        throw jsonError;
+      }
+    }
+    
+    // Convert any percentage weights to decimals
+    if (syllabusData.grade_weights) {
+      syllabusData.grade_weights = syllabusData.grade_weights.map(item => {
+        if (typeof item.weight === 'string' && item.weight.includes('%')) {
+          const numericWeight = parseFloat(item.weight.replace('%', '')) / 100;
+          return { ...item, weight: numericWeight };
+        }
+        return item;
+      });
+    }
+    
+    console.log('Successfully parsed syllabus data');
+    return syllabusData;
+  } catch (error) {
+    console.error(`Error processing syllabus with OpenAI: ${error}`);
+    console.error(`Error stack: ${error.stack}`);
+    
+    // Try regex-based extraction for fallback
+    const extractedWeights = extractGradeWeights(syllabusText);
+    
+    // Provide fallback structured data with any successfully extracted weights
+    console.log('Using fallback syllabus data');
+    return {
+      course_name: extractCourseNameFromText(syllabusText) || "Unknown Course",
+      instructor: extractInstructorFromText(syllabusText) || "Unknown Instructor",
+      grade_weights: extractedWeights || [
+        { name: "Assignments", weight: 0.5 },
+        { name: "Exams", weight: 0.5 }
+      ],
+      assignments: [],
+      due_dates: [],
+      credit_hours: extractCreditHoursFromText(syllabusText) || "3"
+    };
+  }
+}
+
+/**
+ * Process transcript text into structured data with improved prompts and fallbacks.
+ * 
+ * @param {string} transcriptText - Raw text extracted from transcript PDF
+ * @param {OpenAI} openai - Initialized OpenAI client
+ * @param {Object} syllabusData - Optional structured syllabus data for context
+ * @returns {Promise<Object>} Structured transcript data
+ */
+async function processTranscriptText(transcriptText, openai, syllabusData) {
+  console.log('Processing transcript text');
+  try {
+    // Include syllabus course info in prompt if available
+    const courseContext = syllabusData ? 
+      `The current course is ${syllabusData.course_name}. Look for similar courses (same subject) in the transcript.` : 
+      '';
+    
+    // Improved prompt for transcript
+    const transcriptPrompt = `Carefully analyze this academic transcript and extract ONLY the following information in valid JSON format:
+{
+  "overall_gpa": "The overall GPA as listed, e.g. '3.75'",
+  "term_gpa": "The most recent term GPA if available",
+  "courses": [
+    {
+      "course_code": "Complete course code, e.g. 'PHY 184'",
+      "course_name": "Full course name, e.g. 'Electricity and Magnetism'",
+      "semester": "Term/semester taken",
+      "credits": "Number of credits",
+      "grade": "Letter grade received, e.g. 'A'",
+      "numerical_grade": "Numerical grade if available"
+    }
+  ]
+}
+
+${courseContext}
+
+Focus especially on science, math, and physics courses as these are most relevant for prediction. If the transcript has multiple semesters, prioritize the most recent ones first.`;
+    
+    // Call OpenAI with improved prompt and larger token limit
+    console.log('Calling OpenAI API for transcript processing');
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // Keep the same model as before
+      messages: [
+        { role: "system", content: transcriptPrompt },
+        { role: "user", content: transcriptText.substring(0, 16000) } // Increased token limit
+      ],
+      temperature: 0.3 // Lower temperature for more deterministic results
+    });
+    
+    const content = response.choices[0].message.content;
+    console.log(`OpenAI response for transcript: ${content.substring(0, 200)}...`);
+    
+    // Parse JSON response
+    let transcriptData;
+    try {
+      transcriptData = JSON.parse(content);
+    } catch (jsonError) {
+      // Try to extract JSON from possible text response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          transcriptData = JSON.parse(jsonMatch[0]);
+        } catch (nestedError) {
+          throw nestedError;
+        }
+      } else {
+        throw jsonError;
+      }
+    }
+    
+    console.log('Successfully parsed transcript data');
+    return transcriptData;
+  } catch (error) {
+    console.error(`Error processing transcript with OpenAI: ${error}`);
+    console.error(`Error stack: ${error.stack}`);
+    
+    // Provide fallback structured data
+    console.log('Using fallback transcript data');
+    return {
+      overall_gpa: extractGpaFromText(transcriptText) || "3.0",
+      term_gpa: null,
+      courses: []
+    };
+  }
+}
+
+/**
+ * Process grades text into structured data with improved prompts and fallbacks.
+ * 
+ * @param {string} gradesText - Raw text extracted from grades PDF
+ * @param {OpenAI} openai - Initialized OpenAI client
+ * @param {Object} syllabusData - Optional structured syllabus data for context
+ * @returns {Promise<Array>} Array of grade objects
+ */
+async function processGradesText(gradesText, openai, syllabusData) {
+  console.log('Processing grades text');
+  try {
+    // Include grade categories from syllabus in prompt if available
+    const categoriesContext = syllabusData && syllabusData.grade_weights ? 
+      `The grade categories for this course are: ${syllabusData.grade_weights.map(w => w.name).join(', ')}.` : 
+      '';
+    
+    // Improved prompt for grades
+    const gradesPrompt = `Carefully analyze this grade report and extract ONLY the following information as a valid JSON array:
+[
+  {"name": "Assignment name, e.g. Week 1 HW", "grade": 95.5, "category": "Assignment category if known"},
+  {"name": "Another assignment", "grade": 87, "category": "Assignment category if known"},
+  {"name": "Special case assignment", "grade": "Dropped", "category": "Assignment category if known"}
+]
+
+${categoriesContext}
+
+For each assignment, include the exact name and numerical grade. If a grade is marked as dropped, exempted, or excused, use the string "Dropped" instead of a number. Parse ALL grades mentioned in the document, including quizzes, exams, homework, labs, and projects.`;
+    
+    // Call OpenAI with improved prompt and larger token limit
+    console.log('Calling OpenAI API for grades processing');
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini", // Keep the same model as before
+      messages: [
+        { role: "system", content: gradesPrompt },
+        { role: "user", content: gradesText.substring(0, 16000) } // Increased token limit
+      ],
+      temperature: 0.3 // Lower temperature for more deterministic results
+    });
+    
+    const content = response.choices[0].message.content;
+    console.log(`OpenAI response for grades: ${content.substring(0, 200)}...`);
+    
+    // Parse JSON response
+    let gradesData;
+    try {
+      gradesData = JSON.parse(content);
+    } catch (jsonError) {
+      // Try to extract JSON array from response
+      const jsonMatch = content.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        try {
+          gradesData = JSON.parse(jsonMatch[0]);
+        } catch (nestedError) {
+          throw nestedError;
+        }
+      } else {
+        throw jsonError;
+      }
+    }
+    
+    console.log('Successfully parsed grades data');
+    return gradesData;
+  } catch (error) {
+    console.error(`Error processing grades with OpenAI: ${error}`);
+    console.error(`Error stack: ${error.stack}`);
+    
+    // Provide fallback empty array
+    console.log('Using fallback grades data (empty array)');
+    return [];
+  }
+}
+
+/**
+ * Find grading section in syllabus text.
+ * 
+ * @param {string} text - Syllabus text to search
+ * @returns {string|null} Extracted grading section or null if not found
+ */
+function findGradingSection(text) {
+  const gradingPatterns = [
+    /grad(e|ing)[^]*?total[^]*?100\s*%/i,
+    /assessment[^]*?total[^]*?100\s*%/i,
+    /evaluation[^]*?total[^]*?100\s*%/i,
+    /course grade[^]*?contribut[^]*?percentage/i
+  ];
+  
+  for (const pattern of gradingPatterns) {
+    const match = text.match(pattern);
+    if (match) return match[0];
+  }
+  
+  return null;
+}
+
+/**
+ * Extract grade weights using regex patterns.
+ * 
+ * @param {string} text - Text to extract grade weights from
+ * @returns {Array|null} Array of {name, weight} objects or null if none found
+ */
+function extractGradeWeights(text) {
+  try {
+    // Try different patterns to catch various formatting styles
+    const patterns = [
+      /([A-Za-z\s&-]+):\s*(\d+(?:\.\d+)?)%/g,
+      /([A-Za-z\s&-]+)\s*=\s*(\d+(?:\.\d+)?)%/g,
+      /([A-Za-z\s&-]+)\s*\((\d+(?:\.\d+)?)%\)/g
+    ];
+    
+    const results = [];
+    
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const name = match[1].trim();
+        const weight = parseFloat(match[2]) / 100;
+        
+        // Check for duplicates
+        if (!results.some(r => r.name === name)) {
+          results.push({ name, weight });
+        }
+      }
+    }
+    
+    return results.length > 0 ? results : null;
+  } catch (error) {
+    console.error("Error extracting grade weights:", error);
+    return null;
+  }
+}
+
+/**
+ * Extract course name using regex patterns.
+ * 
+ * @param {string} text - Text to extract course name from
+ * @returns {string|null} Course name or null if not found
+ */
+function extractCourseNameFromText(text) {
+  // Try common patterns for course names
+  const coursePatterns = [
+    /Syllabus:?\s+([A-Z]{2,4}\s+\d{3}[A-Z]?)\s+–\s+(.+?)(?=\s+Class Meetings|\n)/i,
+    /Course:?\s+([A-Z]{2,4}\s+\d{3}[A-Z]?)\s*(?:–|:)\s*(.+?)(?=\n)/i,
+    /([A-Z]{2,4}\s+\d{3}[A-Z]?)\s*(?:–|:)\s*(.+?)(?=\n)/i
+  ];
+  
+  for (const pattern of coursePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return match[1] + " - " + match[2].trim();
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extract instructor name using regex patterns.
+ * 
+ * @param {string} text - Text to extract instructor name from
+ * @returns {string|null} Instructor name or null if not found
+ */
+function extractInstructorFromText(text) {
+  // Try common patterns for instructor information
+  const instructorPatterns = [
+    /[Ii]nstructor:?\s+(?:Dr\.|Prof\.|Professor)?\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/,
+    /[Pp]rof(?:\.|\s|essor)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/
+  ];
+  
+  for (const pattern of instructorPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return match[1].trim();
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extract credit hours using regex patterns.
+ * 
+ * @param {string} text - Text to extract credit hours from
+ * @returns {string|null} Credit hours or null if not found
+ */
+function extractCreditHoursFromText(text) {
+  // Try common patterns for credit hours
+  const creditPatterns = [
+    /[Cc]redit\s+[Hh]ours:?\s+(\d+\.?\d*)/,
+    /(\d+\.?\d*)\s+[Cc]redit\s+[Hh]ours/
+  ];
+  
+  for (const pattern of creditPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return match[1].trim();
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extract GPA using regex patterns.
+ * 
+ * @param {string} text - Text to extract GPA from
+ * @returns {string|null} GPA or null if not found
+ */
+function extractGpaFromText(text) {
+  // Try common patterns for GPA
+  const gpaPatterns = [
+    /[Oo]verall\s+GPA:?\s+(\d+\.\d+)/,
+    /GPA:?\s+(\d+\.\d+)/,
+    /Grade Point Average:?\s+(\d+\.\d+)/
+  ];
+  
+  for (const pattern of gpaPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return match[1].trim();
+    }
+  }
+  
+  return null;
 }
 
 /**
@@ -827,7 +1139,7 @@ async function generatePrediction(structuredData) {
     // Call the OpenAI API
     console.log('Calling OpenAI API for prediction');
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: "You are a concise academic advisor." },
         { role: "user", content: prompt }
@@ -1114,3 +1426,9 @@ function constructPrompt(data) {
     return "Based on the available student data, predict the student's final grade. Output exactly in JSON format with two keys: 'grade' (a numeric value) and 'reasoning' (a short explanation). Do not include extra text.";
   }
 }
+
+// Add to exports
+exports.processExtractedText = processExtractedText;
+exports.processSyllabusText = processSyllabusText;
+exports.processTranscriptText = processTranscriptText;
+exports.processGradesText = processGradesText;
