@@ -62,32 +62,26 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
   try {
     console.log('uploadDocument called with document type:', data.documentType);
     
-    // Ensure user is authenticated
     if (!context.auth) {
       throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
     }
     
     const userId = context.auth.uid;
     
-    // Validate input
     if (!data.documentBase64 || !data.documentType) {
       throw new functions.https.HttpsError('invalid-argument', 'Missing document data or type');
     }
 
-    // Get document name or generate one
     const documentName = data.documentName || `${data.documentType}_${Date.now()}.pdf`;
     
-    // Process base64 data
     let base64Data = data.documentBase64;
     if (base64Data.includes('base64,')) {
       base64Data = base64Data.split('base64,')[1];
     }
     
-    // Create buffer from base64
     const buffer = Buffer.from(base64Data, 'base64');
     console.log(`Created buffer with ${buffer.length} bytes`);
     
-    // Create temp file
     const tempFile = tmp.fileSync({ postfix: '.pdf' });
     fs.writeFileSync(tempFile.name, buffer);
     console.log(`Wrote buffer to temp file: ${tempFile.name}`);
@@ -95,6 +89,7 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
     try {
       // Get default bucket
       const bucket = admin.storage().bucket();
+      // Use consistent path format for the trigger to work properly
       const filePath = `users/${userId}/${data.documentType}/${documentName}`;
       
       console.log(`Uploading to Firebase Storage: ${filePath}`);
@@ -103,16 +98,17 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
         metadata: {
           contentType: 'application/pdf',
           metadata: {
-            originalName: documentName // Store original filename in metadata
+            originalName: documentName
           }
         }
       });
       
       console.log(`Successfully uploaded to ${filePath}`);
       
-      // Create a basic document record
+      // Create document record in consistent format
       const db = admin.firestore();
       const docRef = db.collection('users').doc(userId).collection('documents').doc();
+      const documentId = docRef.id;
       
       await docRef.set({
         filePath: filePath,
@@ -122,11 +118,28 @@ exports.uploadDocument = functions.https.onCall(async (data, context) => {
         status: 'uploaded'
       });
       
-      console.log(`Created initial document record in Firestore for ${filePath}`);
+      console.log(`Created document record with ID: ${documentId}`);
+      
+      // IMPORTANT: Directly process the file instead of waiting for trigger
+      // This is a reliable fallback in case the Storage trigger doesn't fire
+      try {
+        console.log('Processing document immediately after upload');
+        // Extract text from the PDF
+        const extractedText = await extractTextFromPdf(userId, documentId, filePath);
+        console.log(`Successfully extracted ${extractedText.length} characters of text`);
+      } catch (processError) {
+        console.error('Error processing document after upload:', processError);
+        // Update the document status to error
+        await docRef.update({
+          status: 'error',
+          error: processError.message
+        });
+      }
       
       return {
         success: true,
-        message: 'Document uploaded successfully',
+        message: 'Document uploaded and processing started',
+        documentId: documentId,
         filePath: filePath
       };
     } catch (uploadError) {
@@ -278,139 +291,61 @@ exports.processPdfUpload = functions.storage.object().onFinalize(async (object) 
     // Expected format: users/{userId}/{documentType}/{filename}.pdf
     const pathParts = filePath.split('/');
     if (pathParts.length < 4) {
-      console.log(`Invalid path format: ${filePath}, pathParts: ${JSON.stringify(pathParts)}`);
+      console.log(`Invalid path format: ${filePath}`);
       return null;
     }
     
     const userId = pathParts[1];
-    const documentType = pathParts[2]; // "syllabus" or "transcript"
+    const documentType = pathParts[2];
     
     console.log(`Processing uploaded PDF: ${filePath} for user: ${userId}, type: ${documentType}`);
     
-    // Get original filename from metadata if available, otherwise use path
-    const originalName = object.metadata && object.metadata.originalName 
-      ? object.metadata.originalName 
-      : pathParts[3]; // Use the filename from the path
-    
-    // Check if document already exists with same path to avoid duplicates
+    // Find the document in Firestore with matching filePath
     const db = admin.firestore();
-    const existingDocs = await db.collection('users').doc(userId)
-      .collection('documents')
-      .where('filePath', '==', filePath)
-      .get();
+    const documentsRef = db.collection('users').doc(userId).collection('documents');
+    const snapshot = await documentsRef.where('filePath', '==', filePath).limit(1).get();
     
-    if (!existingDocs.empty) {
-      console.log(`Document with path ${filePath} already exists, skipping`);
-      return null;
+    if (snapshot.empty) {
+      console.log(`No document found with filePath: ${filePath}, creating one`);
+      // Create a document if one doesn't exist
+      const docRef = documentsRef.doc();
+      await docRef.set({
+        filePath: filePath,
+        documentType: documentType,
+        name: pathParts[3],
+        uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: 'uploaded'
+      });
+      
+      // Extract text and update the document
+      try {
+        await extractTextFromPdf(userId, docRef.id, filePath);
+      } catch (err) {
+        console.error(`Error extracting text: ${err}`);
+        await docRef.update({
+          status: 'error',
+          error: err.message
+        });
+      }
+    } else {
+      // Document exists, extract text and update it
+      const docId = snapshot.docs[0].id;
+      try {
+        await extractTextFromPdf(userId, docId, filePath);
+      } catch (err) {
+        console.error(`Error extracting text: ${err}`);
+        await db.collection('users').doc(userId).collection('documents').doc(docId).update({
+          status: 'error',
+          error: err.message
+        });
+      }
     }
     
-    // Store basic information in Firestore with auto-generated ID
-    const docRef = db.collection('users').doc(userId).collection('documents').doc();
-    
-    await docRef.set({
-      filePath: filePath,
-      documentType: documentType,
-      name: originalName,
-      uploadedAt: admin.firestore.FieldValue.serverTimestamp(),
-      status: 'uploaded'
-    });
-    
-    console.log(`PDF upload metadata saved to Firestore for ${filePath}`);
-    
-    // The text extraction will be handled by the processPdfUpload function
-    // which is triggered by the Storage upload event
-    
-    console.log(`processPdfUpload completed successfully for ${filePath}`);
     return null;
   } catch (error) {
     console.error(`Error in processPdfUpload: ${error}`);
     console.error(`Error stack: ${error.stack}`);
     return null; // Storage triggers must return null on error
-  }
-});
-
-/**
- * Cloud Function to manually trigger text extraction for a document.
- * This can be used if the automatic extraction failed.
- *
- * @param {Object} data - The extraction request data
- * @param {string} data.documentId - ID of the document to process
- * @param {Object} context - The Firebase function context
- * @param {Object} context.auth - Authentication details of the requesting user
- * @returns {Promise<Object>} Object containing extraction status and text length
- * @throws {functions.https.HttpsError} If extraction fails or document not found
- */
-exports.extractPdfText = functions.https.onCall(async (data, context) => {
-  try {
-    console.log('Manual text extraction requested with data:', JSON.stringify(data));
-    
-    // Ensure user is authenticated
-    if (!context.auth) {
-      console.error('Authentication required for extractPdfText');
-      throw new functions.https.HttpsError(
-        'unauthenticated',
-        'User must be authenticated'
-      );
-    }
-    
-    const userId = context.auth.uid;
-    const { documentId } = data;
-    
-    if (!documentId) {
-      throw new functions.https.HttpsError('invalid-argument', 'Document ID is required');
-    }
-    
-    // Get document info from Firestore
-    const db = admin.firestore();
-    const docRef = db.collection('users').doc(userId).collection('documents').doc(documentId);
-    const doc = await docRef.get();
-    
-    if (!doc.exists) {
-      throw new functions.https.HttpsError('not-found', 'Document not found');
-    }
-    
-    const docData = doc.data();
-    const filePath = docData.filePath;
-    
-    if (!filePath) {
-      throw new functions.https.HttpsError('not-found', 'File path not found for document');
-    }
-    
-    console.log(`Starting manual text extraction for ${filePath}`);
-    
-    // Extract text from the PDF
-    const extractedText = await extractTextFromPdf(userId, documentId, filePath);
-    
-    console.log(`Text extraction successful, ${extractedText.length} characters extracted`);
-    
-    // Check if we have enough documents to format data
-    const documentsRef = db.collection('users').doc(userId).collection('documents');
-    const extractedDocs = await documentsRef.where('status', '==', 'extracted').get();
-    
-    if (!extractedDocs.empty) {
-      // Try to format the documents
-      try {
-        await formatDocumentsData(userId);
-      } catch (formatError) {
-        console.error('Error formatting documents:', formatError);
-        // Continue without failing the function
-      }
-    }
-    
-    return {
-      success: true,
-      documentId,
-      message: `Successfully extracted text from document`,
-      textLength: extractedText.length
-    };
-  } catch (error) {
-    console.error(`Error in extractPdfText: ${error}`);
-    console.error(`Error stack: ${error.stack}`);
-    throw new functions.https.HttpsError(
-      'internal',
-      `Error extracting text: ${error.message}`,
-      { detailedError: error.toString() }
-    );
   }
 });
 
@@ -428,11 +363,9 @@ exports.extractPdfText = functions.https.onCall(async (data, context) => {
 async function extractTextFromPdf(userId, documentId, filePath) {
   console.log(`Extracting text from PDF: ${filePath} for user ${userId}, document ${documentId}`);
   
-  // Get a reference to the default bucket
   const bucket = admin.storage().bucket();
-  console.log(`Using bucket: ${bucket.name}`);
-  
   let tempFile = null;
+  
   try {
     // Create a temporary file
     tempFile = tmp.fileSync({ postfix: '.pdf' });
@@ -451,11 +384,7 @@ async function extractTextFromPdf(userId, documentId, filePath) {
     console.log(`Read ${dataBuffer.length} bytes from temporary file`);
     
     console.log('Starting PDF parsing');
-    const pdfData = await pdfParse(dataBuffer, {
-      // Add options to make parsing more robust
-      pagerender: null, // Disable page rendering
-      max: 0 // No page limit
-    });
+    const pdfData = await pdfParse(dataBuffer);
     
     const extractedText = pdfData.text;
     console.log(`Successfully extracted ${extractedText.length} characters of text from ${pdfData.numpages} pages`);
@@ -473,22 +402,23 @@ async function extractTextFromPdf(userId, documentId, filePath) {
       pageCount: pdfData.numpages
     }, { merge: true });
     
-    // Check if we have enough documents to format data
-    const documentsRef = db.collection('users').doc(userId).collection('documents');
-    const extractedDocs = await documentsRef.where('status', '==', 'extracted').get();
+    console.log(`Firestore document updated successfully`);
     
-    if (!extractedDocs.empty) {
-      // Try to format the documents
-      try {
-        console.log('Attempting to format documents after extraction');
+    // Try to trigger document formatting if multiple documents are extracted
+    try {
+      const documentsRef = db.collection('users').doc(userId).collection('documents');
+      const extractedDocs = await documentsRef.where('status', '==', 'extracted').get();
+      
+      if (!extractedDocs.empty && extractedDocs.size >= 1) {
+        console.log('Multiple extracted documents found, attempting to format');
+        const formatDocumentsData = require('./formatDocumentsData').formatDocumentsData;
         await formatDocumentsData(userId);
-      } catch (formatError) {
-        console.error('Error formatting documents:', formatError);
-        // Continue without failing the function
       }
+    } catch (formatError) {
+      console.warn('Non-fatal error during document formatting:', formatError);
+      // This is non-fatal, continue without failing
     }
     
-    console.log(`Firestore document updated successfully`);
     return extractedText;
   } catch (error) {
     console.error(`Error extracting text from PDF: ${error}`);

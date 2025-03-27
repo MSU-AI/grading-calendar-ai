@@ -87,13 +87,19 @@ const DocumentManager: React.FC = () => {
               
               // Upload document
               const uploadDocument = httpsCallable(functions, 'uploadDocument');
-              await uploadDocument({
+              const result = await uploadDocument({
                 documentType,
                 documentName: file.name,
                 documentBase64: base64String
               });
               
-              setStatus(`Uploaded ${file.name} as ${documentType}`);
+              setStatus(`Uploaded ${file.name} as ${documentType}. Processing started.`);
+              
+              // Store the document ID for reference
+              const documentId = (result.data as any).documentId;
+              if (documentId) {
+                console.log(`Document ID: ${documentId}`);
+              }
               resolve();
             } catch (err) {
               reject(err);

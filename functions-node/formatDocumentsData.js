@@ -7,6 +7,11 @@ const admin = require('firebase-admin');
  * @param {string} userId - The user ID
  * @returns {Promise<Object>} Formatted data for calculations and predictions
  */
+/**
+ * Formats all document data using a single OpenAI API call to ensure consistent structure
+ * @param {string} userId - The user ID
+ * @returns {Promise<Object>} Formatted data for calculations and predictions
+ */
 exports.formatDocumentsData = async (userId) => {
   console.log(`Formatting all document data for user ${userId} using OpenAI`);
   
@@ -50,7 +55,7 @@ exports.formatDocumentsData = async (userId) => {
       apiKey: apiKey
     });
     
-    // Create a prompt with all document texts
+    // Create a unified prompt with all document texts
     const prompt = createFormattingPrompt(documentsByType);
     
     // Call OpenAI API
@@ -87,6 +92,11 @@ exports.formatDocumentsData = async (userId) => {
   }
 };
 
+/**
+ * Creates the prompt for OpenAI formatting
+ * @param {Object} documentsByType - Documents organized by type
+ * @returns {string} Formatted prompt
+ */
 /**
  * Creates the prompt for OpenAI formatting
  * @param {Object} documentsByType - Documents organized by type
@@ -175,6 +185,12 @@ For the academicHistory.relevantCourses, analyze the transcript to find courses 
  * @param {Object} formattedData - The formatted data
  * @returns {Promise<void>}
  */
+/**
+ * Stores the formatted data in Firestore
+ * @param {string} userId - The user ID
+ * @param {Object} formattedData - The formatted data
+ * @returns {Promise<void>}
+ */
 async function storeFormattedData(userId, formattedData) {
   console.log(`Storing formatted data for user ${userId}`);
   const db = admin.firestore();
@@ -198,6 +214,12 @@ async function storeFormattedData(userId, formattedData) {
  * @param {Array} documents - The document snapshots
  * @returns {Promise<void>}
  */
+/**
+ * Updates the status of processed documents
+ * @param {string} userId - The user ID
+ * @param {Array} documents - The document snapshots
+ * @returns {Promise<void>}
+ */
 async function updateDocumentStatus(userId, documents) {
   console.log(`Updating status for ${documents.length} documents`);
   const db = admin.firestore();
@@ -215,6 +237,11 @@ async function updateDocumentStatus(userId, documents) {
   console.log('Successfully updated document statuses');
 }
 
+/**
+ * Creates a fallback formatted data structure if OpenAI fails
+ * @param {Object} documentsByType - Documents organized by type
+ * @returns {Object} Fallback formatted data
+ */
 /**
  * Creates a fallback formatted data structure if OpenAI fails
  * @param {Object} documentsByType - Documents organized by type
@@ -271,6 +298,11 @@ function createFallbackFormattedData(documentsByType) {
  * @param {string} text - Text to extract grade weights from
  * @returns {Array} Array of {name, weight} objects
  */
+/**
+ * Extract grade weights using regex patterns
+ * @param {string} text - Text to extract grade weights from
+ * @returns {Array} Array of {name, weight} objects
+ */
 function extractGradeWeights(text) {
   try {
     // Try different patterns to catch various formatting styles
@@ -312,6 +344,9 @@ function extractGradeWeights(text) {
   }
 }
 
+/**
+ * Helper function to get OpenAI API key
+ */
 /**
  * Helper function to get OpenAI API key
  */

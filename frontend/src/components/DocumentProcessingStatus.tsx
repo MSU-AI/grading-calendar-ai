@@ -99,25 +99,26 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     }
   };
 
-  // Handle manual text extraction
-  const handleExtractText = async (documentId: string) => {
+  // Handle document processing retry
+  const handleRetryProcessing = async (documentId: string) => {
     if (!currentUser) return;
     
-    setStatus(`Extracting text for document ${documentId}...`);
+    setStatus(`Retrying processing for document ${documentId}...`);
     setError(null);
     
     try {
-      const extractPdfText = httpsCallable(functions, 'extractPdfText');
-      const result = await extractPdfText({ documentId });
+      // We'll use the formatDocumentsData function to process all documents
+      const formatDocumentsData = httpsCallable(functions, 'formatDocumentsData');
+      const result = await formatDocumentsData({});
       
       if ((result.data as any).success) {
-        setStatus('Text extracted successfully');
+        setStatus('Document processing initiated successfully');
       } else {
-        setError((result.data as any).message || 'Failed to extract text');
+        setError((result.data as any).message || 'Failed to process document');
       }
     } catch (err: any) {
-      console.error('Error extracting text:', err);
-      setError(`Text extraction failed: ${err.message || 'Unknown error'}`);
+      console.error('Error processing document:', err);
+      setError(`Processing failed: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -252,18 +253,18 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
                   <td style={styles.tableCell}>
                     {doc.status === 'uploaded' && (
                       <button
-                        onClick={() => handleExtractText(doc.id)}
+                        onClick={() => handleRetryProcessing(doc.id)}
                         style={styles.actionButton}
                       >
-                        Extract Text
+                        Process Document
                       </button>
                     )}
                     {doc.status === 'error' && (
                       <button
-                        onClick={() => handleExtractText(doc.id)}
+                        onClick={() => handleRetryProcessing(doc.id)}
                         style={styles.actionButton}
                       >
-                        Retry
+                        Retry Processing
                       </button>
                     )}
                     {doc.error && (
