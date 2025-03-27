@@ -21,6 +21,7 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
   const { currentUser } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isFormatting, setIsFormatting] = useState<boolean>(false);
+  const [processingComplete, setProcessingComplete] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
   
@@ -35,44 +36,88 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     const documentsRef = collection(userDocRef, 'documents');
     const q = query(documentsRef);
     
+    console.log('Setting up document status listener');
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs: Document[] = [];
+      
+      console.log(`Received ${snapshot.docs.length} documents from Firestore`);
+      
       snapshot.forEach(doc => {
+        const data = doc.data();
+        console.log(`Document ${doc.id}, Type: ${data.documentType}, Status: ${data.status}`);
+        
         docs.push({
           id: doc.id,
-          ...doc.data() as Omit<Document, 'id'>
+          ...data as Omit<Document, 'id'>
         });
       });
       
+      // Update the documents state
       setDocuments(docs);
       
-      // Check if all documents are processed
-      const allProcessed = docs.length > 0 && docs.every(doc => doc.status === 'processed');
-      if (allProcessed && onProcessingComplete) {
-        onProcessingComplete();
+      if (docs.length > 0) {
+        // Force case-insensitive comparison for document types
+        const documentTypeCount = {
+          syllabus: docs.filter(doc => doc.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS).length,
+          transcript: docs.filter(doc => doc.documentType?.toLowerCase() === DOCUMENT_TYPES.TRANSCRIPT).length,
+          grades: docs.filter(doc => doc.documentType?.toLowerCase() === DOCUMENT_TYPES.GRADES).length
+        };
+        
+        // Force case-insensitive comparison for document status
+        const statusCount = {
+          uploaded: docs.filter(d => d.status?.toLowerCase() === 'uploaded').length,
+          extracted: docs.filter(d => d.status?.toLowerCase() === 'extracted').length,
+          processed: docs.filter(d => d.status?.toLowerCase() === 'processed').length,
+          error: docs.filter(d => d.status?.toLowerCase() === 'error').length
+        };
+        
+        console.log('Document counts by type:', documentTypeCount);
+        console.log('Document counts by status:', statusCount);
+        
+        // Check for processing completion based on processed syllabus
+        const hasSyllabus = docs.some(doc => 
+          doc.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS && 
+          doc.status?.toLowerCase() === 'processed'
+        );
+        
+        console.log('Has processed syllabus:', hasSyllabus);
+        
+        // Trigger completion if we have a processed syllabus
+        if (hasSyllabus && onProcessingComplete && !processingComplete) {
+          console.log('Processing complete condition met - has processed syllabus');
+          onProcessingComplete();
+          setProcessingComplete(true);
+        }
       }
+    }, (error) => {
+      console.error('Error in document snapshot listener:', error);
+      setError('Error monitoring document status');
     });
     
     return () => unsubscribe();
   }, [currentUser, db, onProcessingComplete]);
 
-  // Count documents by status
+  // Calculate document counts with case-insensitive comparison
   const documentCounts = {
-    uploaded: documents.filter(doc => doc.status === 'uploaded').length,
-    extracted: documents.filter(doc => doc.status === 'extracted').length,
-    processed: documents.filter(doc => doc.status === 'processed').length,
-    error: documents.filter(doc => doc.status === 'error').length
+    uploaded: documents.filter(doc => doc.status?.toLowerCase() === 'uploaded').length,
+    extracted: documents.filter(doc => doc.status?.toLowerCase() === 'extracted').length,
+    processed: documents.filter(doc => doc.status?.toLowerCase() === 'processed').length,
+    error: documents.filter(doc => doc.status?.toLowerCase() === 'error').length
   };
 
-  // Count documents by type (case-insensitive)
+  // Count documents by type with case-insensitive comparison
   const documentTypeCount = {
-    syllabus: documents.filter(doc => doc.documentType.toLowerCase() === DOCUMENT_TYPES.SYLLABUS).length,
-    transcript: documents.filter(doc => doc.documentType.toLowerCase() === DOCUMENT_TYPES.TRANSCRIPT).length,
-    grades: documents.filter(doc => doc.documentType.toLowerCase() === DOCUMENT_TYPES.GRADES).length
+    syllabus: documents.filter(doc => doc.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS).length,
+    transcript: documents.filter(doc => doc.documentType?.toLowerCase() === DOCUMENT_TYPES.TRANSCRIPT).length,
+    grades: documents.filter(doc => doc.documentType?.toLowerCase() === DOCUMENT_TYPES.GRADES).length
   };
 
-  // Check if we have the minimum required documents (case-insensitive)
-  const hasSyllabus = documents.some(doc => doc.documentType.toLowerCase() === DOCUMENT_TYPES.SYLLABUS);
+  // Check if we have the minimum required documents with case-insensitive comparison
+  const hasSyllabus = documents.some(doc => 
+    doc.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS &&
+    doc.status?.toLowerCase() === 'processed'
+  );
   const hasMinimumDocuments = hasSyllabus;
 
   // Handle manual formatting
@@ -123,9 +168,11 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     }
   };
 
-  // Calculate overall progress
+  // Calculate overall progress with case-insensitive comparison and logging
   const calculateProgress = () => {
     if (documents.length === 0) return 0;
+    
+    console.log('Calculating progress with', documents.length, 'documents');
     
     const totalSteps = documents.length * 2; // Upload + Process for each document
     let completedSteps = 0;
@@ -135,12 +182,14 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
       completedSteps += 1;
       
       // Count processing step for extracted or processed documents
-      if (doc.status === 'extracted' || doc.status === 'processed') {
+      if (doc.status?.toLowerCase() === 'extracted' || doc.status?.toLowerCase() === 'processed') {
         completedSteps += 1;
       }
     });
     
-    return Math.round((completedSteps / totalSteps) * 100);
+    const progress = Math.round((completedSteps / totalSteps) * 100);
+    console.log(`Progress calculation: ${completedSteps}/${totalSteps} = ${progress}%`);
+    return progress;
   };
 
   const progress = calculateProgress();
@@ -245,15 +294,15 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
                   <td style={styles.tableCell}>
                     <span style={{
                       ...styles.statusBadge,
-                      backgroundColor: doc.status === 'processed' ? '#4caf50' : 
-                                      doc.status === 'extracted' ? '#ff9800' :
-                                      doc.status === 'error' ? '#f44336' : '#2196f3'
+                      backgroundColor: doc.status?.toLowerCase() === 'processed' ? '#4caf50' : 
+                                      doc.status?.toLowerCase() === 'extracted' ? '#ff9800' :
+                                      doc.status?.toLowerCase() === 'error' ? '#f44336' : '#2196f3'
                     }}>
                       {doc.status}
                     </span>
                   </td>
                   <td style={styles.tableCell}>
-                    {doc.status === 'uploaded' && (
+                    {doc.status?.toLowerCase() === 'uploaded' && (
                       <button
                         onClick={() => handleRetryProcessing(doc.id)}
                         style={styles.actionButton}
@@ -261,7 +310,7 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
                         Process Document
                       </button>
                     )}
-                    {doc.status === 'error' && (
+                    {doc.status?.toLowerCase() === 'error' && (
                       <button
                         onClick={() => handleRetryProcessing(doc.id)}
                         style={styles.actionButton}

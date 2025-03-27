@@ -8,16 +8,11 @@ const { DOCUMENT_TYPES, normalizeDocumentType } = require('./constants/documentT
  * @param {string} userId - The user ID
  * @returns {Promise<Object>} Formatted data for calculations and predictions
  */
-/**
- * Formats all document data using a single OpenAI API call to ensure consistent structure
- * @param {string} userId - The user ID
- * @returns {Promise<Object>} Formatted data for calculations and predictions
- */
 exports.formatDocumentsData = async (userId) => {
   console.log(`Formatting all document data for user ${userId} using OpenAI`);
   
   try {
-    // Get all processed documents with extracted text
+    // Get all documents with extracted text
     const db = admin.firestore();
     const documentsRef = db.collection('users').doc(userId).collection('documents');
     const snapshot = await documentsRef.where('status', '==', 'extracted').get();
@@ -27,12 +22,16 @@ exports.formatDocumentsData = async (userId) => {
       return null;
     }
     
+    console.log(`Found ${snapshot.size} documents with status 'extracted'`);
+    
     // Organize documents by type
     const documentsByType = {};
     snapshot.forEach(doc => {
       const data = doc.data();
       if (data.documentType && data.text) {
-        documentsByType[data.documentType] = {
+        // Use normalized document type
+        const normalizedType = normalizeDocumentType(data.documentType);
+        documentsByType[normalizedType] = {
           id: doc.id,
           text: data.text,
           ...data
@@ -92,7 +91,8 @@ exports.formatDocumentsData = async (userId) => {
     await storeFormattedData(userId, formattedData);
     
     // Update the status of all processed documents
-    await updateDocumentStatus(userId, snapshot.docs);
+    const updateResult = await updateDocumentStatus(userId, snapshot.docs);
+    console.log(`Document status update result: ${updateResult}`);
     
     return formattedData;
   } catch (error) {
@@ -108,16 +108,11 @@ exports.formatDocumentsData = async (userId) => {
  * @param {Object} documentsByType - Documents organized by type
  * @returns {string} Formatted prompt
  */
-/**
- * Creates the prompt for OpenAI formatting
- * @param {Object} documentsByType - Documents organized by type
- * @returns {string} Formatted prompt
- */
 function createFormattingPrompt(documentsByType) {
   // Extract the document texts
-  const syllabusText = documentsByType.syllabus ? documentsByType.syllabus.text : '';
-  const gradesText = documentsByType.grades ? documentsByType.grades.text : '';
-  const transcriptText = documentsByType.transcript ? documentsByType.transcript.text : '';
+  const syllabusText = documentsByType[DOCUMENT_TYPES.SYLLABUS]?.text || '';
+  const gradesText = documentsByType[DOCUMENT_TYPES.GRADES]?.text || '';
+  const transcriptText = documentsByType[DOCUMENT_TYPES.TRANSCRIPT]?.text || '';
   
   return `
 I need you to format educational document data into a consistent structure for grade calculations and predictions.
@@ -196,12 +191,6 @@ For the academicHistory.relevantCourses, analyze the transcript to find courses 
  * @param {Object} formattedData - The formatted data
  * @returns {Promise<void>}
  */
-/**
- * Stores the formatted data in Firestore
- * @param {string} userId - The user ID
- * @param {Object} formattedData - The formatted data
- * @returns {Promise<void>}
- */
 async function storeFormattedData(userId, formattedData) {
   console.log(`Storing formatted data for user ${userId}`);
   const db = admin.firestore();
@@ -223,27 +212,27 @@ async function storeFormattedData(userId, formattedData) {
  * Updates the status of processed documents
  * @param {string} userId - The user ID
  * @param {Array} documents - The document snapshots
- * @returns {Promise<void>}
- */
-/**
- * Updates the status of processed documents
- * @param {string} userId - The user ID
- * @param {Array} documents - The document snapshots
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} True if any documents were updated
  */
 async function updateDocumentStatus(userId, documents) {
-  console.log(`Updating status for ${documents.length} documents`);
+  console.log(`Attempting to update status for ${documents.length} documents`);
   const db = admin.firestore();
   const batch = db.batch();
   
   let updateCount = 0;
   
   documents.forEach(doc => {
-    const docRef = db.collection('users').doc(userId).collection('documents').doc(doc.id);
-    const docData = doc.data();
+    // Add extra logging to debug
+    console.log(`Processing document for status update: ${doc.id}`);
     
-    // Only update documents that are in 'extracted' status
-    if (docData.status === 'extracted') {
+    const docRef = db.collection('users').doc(userId).collection('documents').doc(doc.id);
+    
+    // Handle different document object formats
+    const docData = doc.data ? doc.data() : doc;
+    console.log(`Document status before update: ${docData.status}`);
+    
+    // Only update documents that are in 'extracted' status (case-insensitive)
+    if (docData.status?.toLowerCase() === 'extracted') {
       batch.update(docRef, { 
         status: 'processed',
         processedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -256,9 +245,14 @@ async function updateDocumentStatus(userId, documents) {
   });
   
   if (updateCount > 0) {
-    await batch.commit();
-    console.log(`Successfully updated ${updateCount} document statuses to processed`);
-    return true;
+    try {
+      await batch.commit();
+      console.log(`Successfully updated ${updateCount} document statuses to processed`);
+      return true;
+    } catch (error) {
+      console.error(`Error committing batch update: ${error}`);
+      throw error;
+    }
   } else {
     console.log('No documents to update');
     return false;
@@ -270,16 +264,11 @@ async function updateDocumentStatus(userId, documents) {
  * @param {Object} documentsByType - Documents organized by type
  * @returns {Object} Fallback formatted data
  */
-/**
- * Creates a fallback formatted data structure if OpenAI fails
- * @param {Object} documentsByType - Documents organized by type
- * @returns {Object} Fallback formatted data
- */
 function createFallbackFormattedData(documentsByType) {
   console.log('Creating fallback formatted data');
   
   // Extract basic information using regex patterns
-  const syllabusText = documentsByType.syllabus ? documentsByType.syllabus.text : '';
+  const syllabusText = documentsByType[DOCUMENT_TYPES.SYLLABUS]?.text || '';
   
   // Extract course name
   const courseNameMatch = syllabusText.match(/course(?:\s+title)?:?\s*([^\n]+)/i);
@@ -297,7 +286,7 @@ function createFallbackFormattedData(documentsByType) {
   const gradeWeights = extractGradeWeights(syllabusText);
   
   // Extract GPA from transcript
-  const transcriptText = documentsByType.transcript ? documentsByType.transcript.text : '';
+  const transcriptText = documentsByType[DOCUMENT_TYPES.TRANSCRIPT]?.text || '';
   const gpaMatch = transcriptText.match(/gpa:?\s*([\d\.]+)/i);
   const gpa = gpaMatch ? gpaMatch[1].trim() : "3.0";
   
@@ -321,11 +310,6 @@ function createFallbackFormattedData(documentsByType) {
   };
 }
 
-/**
- * Extract grade weights using regex patterns
- * @param {string} text - Text to extract grade weights from
- * @returns {Array} Array of {name, weight} objects
- */
 /**
  * Extract grade weights using regex patterns
  * @param {string} text - Text to extract grade weights from
@@ -372,9 +356,6 @@ function extractGradeWeights(text) {
   }
 }
 
-/**
- * Helper function to get OpenAI API key
- */
 /**
  * Helper function to get OpenAI API key
  */

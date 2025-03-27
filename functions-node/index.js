@@ -405,7 +405,7 @@ async function extractTextFromPdf(userId, documentId, filePath) {
       pageCount: pdfData.numpages
     }, { merge: true });
     
-    console.log(`Firestore document updated successfully`);
+    console.log(`Firestore document updated successfully to extracted status`);
     
     // Always try to format documents after successful extraction
     try {
@@ -416,11 +416,27 @@ async function extractTextFromPdf(userId, documentId, filePath) {
       const formatResult = await formatDocumentsData(userId);
       if (formatResult) {
         console.log('Document formatting completed successfully');
+        
+        // Get the document type to check if it's a syllabus
+        const docSnapshot = await docRef.get();
+        const docData = docSnapshot.data();
+        
+        if (docData.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS.toLowerCase()) {
+          console.log('Processed document is a syllabus, checking for completion');
+          
+          // Check if the syllabus is now processed
+          const processedDoc = await docRef.get();
+          const processedData = processedDoc.data();
+          
+          if (processedData.status?.toLowerCase() === 'processed') {
+            console.log('Syllabus processing complete, this should trigger UI update');
+          }
+        }
       } else {
         console.log('Document formatting was not performed or failed');
       }
     } catch (formatError) {
-      console.warn('Error during document formatting, but continuing:', formatError);
+      console.error('Error during document formatting:', formatError);
       // Non-fatal error, continue with extraction success
     }
     
