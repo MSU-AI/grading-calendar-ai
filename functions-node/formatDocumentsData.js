@@ -45,21 +45,21 @@ exports.formatDocumentsData = async (userId) => {
     
     console.log(`Found documents by type: ${Object.keys(documentsByType).join(', ')}`);
     
-    // Check if we have the minimum required documents (syllabus) - case insensitive
+    // Check if we have a syllabus document - case insensitive
     const hasSyllabus = Object.entries(documentsByType).some(([type]) => 
       normalizeDocumentType(type) === DOCUMENT_TYPES.SYLLABUS
     );
     
-    if (!hasSyllabus) {
-      console.log('No syllabus document found, cannot format data');
-      console.log('Available types:', Object.keys(documentsByType));
-      return null;
-    }
-
-    // Get the syllabus document using case-insensitive comparison
-    const syllabusDoc = Object.entries(documentsByType).find(([type]) => 
+    // Get the syllabus document if available
+    const syllabusDoc = hasSyllabus ? Object.entries(documentsByType).find(([type]) => 
       normalizeDocumentType(type) === DOCUMENT_TYPES.SYLLABUS
-    )?.[1];
+    )?.[1] : null;
+
+    // Log available document types
+    console.log('Available document types:', Object.keys(documentsByType));
+    if (!hasSyllabus) {
+      console.log('No syllabus document found - proceeding with limited formatting');
+    }
     
     // Get OpenAI API key
     const apiKey = getOpenAIApiKey();
@@ -137,56 +137,67 @@ ${gradesText}` : 'GRADES DATA: Not available'}
 ${transcriptText ? `TRANSCRIPT DATA:
 ${transcriptText}` : 'TRANSCRIPT DATA: Not available'}
 
-Please format this data into the following exact JSON structure:
+Please format this data into the following exact JSON structure. If a syllabus is not available, provide best-effort values based on available data:
 {
   "course": {
-    "name": "Course name from syllabus",
-    "instructor": "Instructor name from syllabus",
-    "creditHours": "Credit hours as string"
+    "name": "Course name (from syllabus if available, otherwise derive from grades/transcript)",
+    "instructor": "Instructor name if available, otherwise 'Unknown'",
+    "creditHours": "Credit hours if available, otherwise '3'"
   },
   "gradeWeights": [
     {
-      "name": "Category name (e.g., 'Exams', 'Homework')",
+      "name": "Category name (from syllabus or inferred from grades)",
       "weight": 0.3 // Decimal weight, ensure all weights sum to 1.0
     }
   ],
   "completedAssignments": [
     {
-      "name": "Assignment name",
+      "name": "Assignment name from grades",
       "grade": 95, // Numeric grade
       "maxPoints": 100, // Maximum possible points
-      "category": "Category name matching a gradeWeight name"
+      "category": "Best matching category based on name"
     }
   ],
   "remainingAssignments": [
     {
-      "name": "Assignment name",
-      "category": "Category name matching a gradeWeight name"
+      "name": "Assignment name from syllabus if available",
+      "category": "Best matching category"
     }
   ],
   "dueDates": [
     {
       "assignment": "Assignment name",
-      "due_date": "Due date string"
+      "due_date": "Due date if available"
     }
   ],
-  "gpa": "Overall GPA as string",
+  "gpa": "Overall GPA from transcript, or 'N/A' if not available",
   "academicHistory": {
     "relevantCourses": [
       {
-        "course_code": "Course code (e.g., PHY 184)",
+        "course_code": "Course code if available",
         "course_name": "Course name",
-        "grade": "Letter grade received",
+        "grade": "Letter grade if available",
         "numerical_grade": "Numerical equivalent if available",
-        "relevance": "High/Medium/Low based on similarity to current course"
+        "relevance": "High/Medium/Low based on available context"
       }
     ]
   }
 }
 
-Only include assignments in "remainingAssignments" if they appear in the syllabus but not in the completed grades.
-Ensure that all assignments have a matching category from the grade weights.
-All weights should sum to exactly 1.0.
+Processing Instructions:
+1. If syllabus is available:
+   - Use exact grade weights and assignments
+   - Match completed assignments to syllabus categories
+   - List remaining assignments from syllabus
+
+2. If only grades are available:
+   - Infer categories from assignment names
+   - Create approximate grade weights based on assignment counts
+   - Leave remainingAssignments empty
+
+3. If transcript is available:
+   - Include GPA and relevant course history
+   - Use course names to determine relevance
 
 For the academicHistory.relevantCourses, analyze the transcript to find courses that are relevant to the current course:
 - High relevance: Same department (e.g., PHY for Physics courses), prerequisites, or similar keywords

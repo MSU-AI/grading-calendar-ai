@@ -75,20 +75,19 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
         console.log('Document counts by type:', documentTypeCount);
         console.log('Document counts by status:', statusCount);
         
-        // Check for processing completion based on processed syllabus
-        const hasSyllabus = docs.some(doc => 
-          doc.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS && 
-          doc.status?.toLowerCase() === 'processed'
-        );
-        
-        console.log('Has processed syllabus:', hasSyllabus);
-        
-        // Trigger completion if we have a processed syllabus
-        if (hasSyllabus && onProcessingComplete && !processingComplete) {
-          console.log('Processing complete condition met - has processed syllabus');
-          onProcessingComplete();
-          setProcessingComplete(true);
-        }
+  // Check for processing completion based on any processed document
+  const hasProcessedDocuments = docs.some(doc => 
+    doc.status?.toLowerCase() === 'processed'
+  );
+  
+  console.log('Has processed documents:', hasProcessedDocuments);
+  
+  // Trigger completion if we have any processed document
+  if (hasProcessedDocuments && onProcessingComplete && !processingComplete) {
+    console.log('Processing complete condition met - has processed documents');
+    onProcessingComplete();
+    setProcessingComplete(true);
+  }
       }
     }, (error) => {
       console.error('Error in document snapshot listener:', error);
@@ -306,7 +305,7 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
           <div style={styles.documentTypeItem}>
             <span style={styles.documentTypeLabel}>Syllabus</span>
             <span style={styles.documentTypeCount}>{documentTypeCount.syllabus}</span>
-            {!hasSyllabus && <span style={styles.documentTypeWarning}>Required</span>}
+            {!hasSyllabus && <span style={{...styles.documentTypeWarning, color: '#ff9800'}}>Recommended</span>}
           </div>
           <div style={styles.documentTypeItem}>
             <span style={styles.documentTypeLabel}>Transcript</span>
@@ -318,9 +317,9 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
           </div>
         </div>
         
-        {!hasMinimumDocuments && (
+        {documents.length === 0 && (
           <p style={styles.warningMessage}>
-            You need to upload at least a syllabus document to enable processing.
+            Upload documents to begin processing. A syllabus is recommended but not required.
           </p>
         )}
       </div>
