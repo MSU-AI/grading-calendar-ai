@@ -4,6 +4,31 @@ const admin = require('firebase-admin');
 const { DOCUMENT_TYPES, normalizeDocumentType } = require('./constants/documentTypes');
 
 /**
+ * Store debugging data in Firestore
+ * @param {string} userId - User ID 
+ * @param {string} prompt - OpenAI prompt
+ * @param {string} response - OpenAI response
+ */
+async function storeDebugData(userId, prompt, response) {
+  try {
+    const db = admin.firestore();
+    const debugRef = db.collection('users').doc(userId).collection('debug').doc();
+    
+    await debugRef.set({
+      prompt,
+      response,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    console.log(`Debug data stored with ID: ${debugRef.id}`);
+    return debugRef.id;
+  } catch (error) {
+    console.error("Error storing debug data:", error);
+    // Don't throw - this is just for debugging
+  }
+}
+
+/**
  * Formats all document data using a single OpenAI API call to ensure consistent structure
  * @param {string} userId - The user ID
  * @returns {Promise<Object>} Formatted data for calculations and predictions
@@ -90,10 +115,14 @@ exports.formatDocumentsData = async (userId) => {
     });
     
     // Extract and parse the JSON response
+    const responseContent = response.choices[0].message.content;
     console.log("===== OPENAI RESPONSE =====");
-    console.log(response.choices[0].message.content);
+    console.log(responseContent);
     
-    const formattedData = JSON.parse(response.choices[0].message.content);
+    // Store debug data
+    await storeDebugData(userId, prompt, responseContent);
+    
+    const formattedData = JSON.parse(responseContent);
     console.log("===== PARSED FORMATTED DATA =====");
     console.log(JSON.stringify(formattedData, null, 2));
     
