@@ -117,7 +117,6 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     doc.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS &&
     doc.status?.toLowerCase() === 'processed'
   );
-  const hasMinimumDocuments = hasSyllabus;
 
   // Handle manual formatting
   const handleFormatDocuments = async () => {
