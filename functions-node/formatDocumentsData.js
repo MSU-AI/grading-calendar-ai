@@ -9,7 +9,7 @@ const { DOCUMENT_TYPES, normalizeDocumentType } = require('./constants/documentT
  * @returns {Promise<Object>} Formatted data for calculations and predictions
  */
 exports.formatDocumentsData = async (userId) => {
-  console.log(`Formatting all document data for user ${userId} using OpenAI`);
+  console.log(`====== FORMAT DOCUMENTS DATA CALLED - USER ID: ${userId} ======`);
   
   try {
     // Get all documents with extracted text
@@ -22,7 +22,11 @@ exports.formatDocumentsData = async (userId) => {
       return null;
     }
     
-    console.log(`Found ${snapshot.size} documents with status 'extracted'`);
+    console.log(`Found ${snapshot.size} documents with status 'extracted':`);
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      console.log(`- Doc ID: ${doc.id}, Type: ${data.documentType}, Status: ${data.status}, Text length: ${data.text?.length || 0}`);
+    });
     
     // Organize documents by type
     const documentsByType = {};
@@ -69,6 +73,8 @@ exports.formatDocumentsData = async (userId) => {
     const prompt = createFormattingPrompt(documentsByType);
     
     // Call OpenAI API
+    console.log("===== OPENAI PROMPT =====");
+    console.log(prompt);
     console.log('Calling OpenAI for unified data formatting');
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -84,8 +90,12 @@ exports.formatDocumentsData = async (userId) => {
     });
     
     // Extract and parse the JSON response
+    console.log("===== OPENAI RESPONSE =====");
+    console.log(response.choices[0].message.content);
+    
     const formattedData = JSON.parse(response.choices[0].message.content);
-    console.log('Successfully formatted data with OpenAI');
+    console.log("===== PARSED FORMATTED DATA =====");
+    console.log(JSON.stringify(formattedData, null, 2));
     
     // Store the formatted data in the user's data document
     await storeFormattedData(userId, formattedData);
@@ -215,42 +225,40 @@ async function storeFormattedData(userId, formattedData) {
  * @returns {Promise<boolean>} True if any documents were updated
  */
 async function updateDocumentStatus(userId, documents) {
-  console.log(`Attempting to update status for ${documents.length} documents`);
+  console.log(`===== UPDATE DOCUMENT STATUS - USER ${userId} =====`);
+  console.log(`Documents to process: ${documents.length}`);
+  
   const db = admin.firestore();
   const batch = db.batch();
   
   let updateCount = 0;
   
   documents.forEach(doc => {
-    // Add extra logging to debug
-    console.log(`Processing document for status update: ${doc.id}`);
+    const docData = doc.data ? doc.data() : doc;
+    console.log(`Processing doc ${doc.id}: Type: ${docData.documentType}, Status: ${docData.status}`);
     
     const docRef = db.collection('users').doc(userId).collection('documents').doc(doc.id);
     
-    // Handle different document object formats
-    const docData = doc.data ? doc.data() : doc;
-    console.log(`Document status before update: ${docData.status}`);
-    
-    // Only update documents that are in 'extracted' status (case-insensitive)
     if (docData.status?.toLowerCase() === 'extracted') {
       batch.update(docRef, { 
         status: 'processed',
         processedAt: admin.firestore.FieldValue.serverTimestamp()
       });
       updateCount++;
-      console.log(`Marking document ${doc.id} as processed`);
+      console.log(`✓ Marking document ${doc.id} as processed`);
     } else {
-      console.log(`Skipping document ${doc.id} with status ${docData.status}`);
+      console.log(`✗ Skipping document ${doc.id} with status ${docData.status}`);
     }
   });
   
   if (updateCount > 0) {
     try {
       await batch.commit();
-      console.log(`Successfully updated ${updateCount} document statuses to processed`);
+      console.log(`✓ Successfully committed batch update for ${updateCount} documents`);
       return true;
     } catch (error) {
-      console.error(`Error committing batch update: ${error}`);
+      console.error(`✗ Error committing batch update: ${error}`);
+      console.error(error.stack);
       throw error;
     }
   } else {

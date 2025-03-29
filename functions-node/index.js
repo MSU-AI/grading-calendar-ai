@@ -475,7 +475,8 @@ async function extractTextFromPdf(userId, documentId, filePath) {
  * @throws {Error} If processing fails
  */
 async function processExtractedText(docs) {
-  console.log('Processing extracted text into structured data');
+  console.log("===== PROCESS EXTRACTED TEXT CALLED =====");
+  console.log(`Documents available: ${Object.keys(docs).join(', ')}`);
   const structuredData = {};
   
   // Get API key
@@ -494,25 +495,31 @@ async function processExtractedText(docs) {
   
   // Process syllabus
   if (docs.syllabus) {
+    console.log(`Processing syllabus with ${docs.syllabus.length} characters`);
     structuredData.syllabus = await processSyllabusText(docs.syllabus, openai);
+    console.log("Syllabus processed successfully");
   }
   
   // Process transcript
   if (docs.transcript) {
+    console.log(`Processing transcript with ${docs.transcript.length} characters`);
     structuredData.transcript = await processTranscriptText(
       docs.transcript, 
       openai, 
       structuredData.syllabus
     );
+    console.log("Transcript processed successfully");
   }
   
   // Process grades
   if (docs.grades) {
+    console.log(`Processing grades with ${docs.grades.length} characters`);
     structuredData.grades = await processGradesText(
       docs.grades, 
       openai, 
       structuredData.syllabus
     );
+    console.log("Grades processed successfully:", JSON.stringify(structuredData.grades, null, 2));
   }
   
   console.log('Finished processing extracted text');

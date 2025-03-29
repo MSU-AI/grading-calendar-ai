@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getFirestore, collection, query, onSnapshot, doc } from 'firebase/firestore';
+import { getFirestore, collection, query, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import DOCUMENT_TYPES, { DocumentType } from '../constants/documentTypes';
 
@@ -192,10 +192,71 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     return progress;
   };
 
+  // Function to inspect document data
+  const inspectDocumentData = async (documentId: string) => {
+    if (!currentUser) return;
+    
+    setStatus(`Inspecting document ${documentId}...`);
+    
+    try {
+      // Get document from Firestore
+      const db = getFirestore();
+      const docRef = doc(db, 'users', currentUser.uid, 'documents', documentId);
+      const docSnap = await getDoc(docRef);
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        console.log("===== DOCUMENT DATA =====");
+        console.log(`Document ID: ${documentId}`);
+        console.log(`Type: ${data.documentType}`);
+        console.log(`Status: ${data.status}`);
+        console.log(`Name: ${data.name}`);
+        
+        // Log text data if available (limited to first 500 chars for readability)
+        if (data.text) {
+          console.log(`Text length: ${data.text.length} characters`);
+          console.log("First 500 characters:");
+          console.log(data.text.substring(0, 500) + "...");
+        }
+        
+        setStatus(`Document data logged to console for ${documentId}`);
+      } else {
+        setError(`Document not found: ${documentId}`);
+      }
+    } catch (err: any) {
+      console.error('Error inspecting document:', err);
+      setError(`Inspection failed: ${err.message || 'Unknown error'}`);
+    }
+  };
+
+  // Function to inspect formatted data
+  const inspectFormattedData = async () => {
+    if (!currentUser) return;
+    
+    setStatus('Fetching formatted data...');
+    
+    try {
+      const db = getFirestore();
+      const formattedDataRef = doc(db, 'users', currentUser.uid, 'data', 'formatted_data');
+      const docSnap = await getDoc(formattedDataRef);
+      
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        console.log("===== FORMATTED DATA =====");
+        console.log(JSON.stringify(data.formatted_data, null, 2));
+        setStatus('Formatted data logged to console');
+      } else {
+        console.log("No formatted data document found");
+        setError('No formatted data available');
+      }
+    } catch (err: any) {
+      console.error('Error fetching formatted data:', err);
+      setError(`Failed to fetch formatted data: ${err.message || 'Unknown error'}`);
+    }
+  };
+
   const progress = calculateProgress();
   const canFormat = documentCounts.extracted > 0 && !isFormatting;
-  // We'll keep this comment to document what we're checking, but remove the unused variable
-  // const hasErrors = documentCounts.error > 0;
 
   return (
     <div style={styles.container}>
@@ -265,13 +326,21 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
       </div>
       
       {canFormat && (
-        <button 
-          onClick={handleFormatDocuments} 
-          style={styles.formatButton}
-          disabled={isFormatting}
-        >
-          {isFormatting ? 'Formatting...' : 'Format Documents'}
-        </button>
+        <div>
+          <button 
+            onClick={handleFormatDocuments} 
+            style={styles.formatButton}
+            disabled={isFormatting}
+          >
+            {isFormatting ? 'Formatting...' : 'Format Documents'}
+          </button>
+          <button 
+            onClick={inspectFormattedData}
+            style={{...styles.formatButton, backgroundColor: '#666', marginLeft: '10px'}}
+          >
+            Inspect Formatted Data
+          </button>
+        </div>
       )}
       
       {documents.length > 0 && (
@@ -302,22 +371,30 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
                     </span>
                   </td>
                   <td style={styles.tableCell}>
-                    {doc.status?.toLowerCase() === 'uploaded' && (
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      {doc.status?.toLowerCase() === 'uploaded' && (
+                        <button
+                          onClick={() => handleRetryProcessing(doc.id)}
+                          style={styles.actionButton}
+                        >
+                          Process Document
+                        </button>
+                      )}
+                      {doc.status?.toLowerCase() === 'error' && (
+                        <button
+                          onClick={() => handleRetryProcessing(doc.id)}
+                          style={styles.actionButton}
+                        >
+                          Retry Processing
+                        </button>
+                      )}
                       <button
-                        onClick={() => handleRetryProcessing(doc.id)}
-                        style={styles.actionButton}
+                        onClick={() => inspectDocumentData(doc.id)}
+                        style={{...styles.actionButton, backgroundColor: '#666'}}
                       >
-                        Process Document
+                        Inspect
                       </button>
-                    )}
-                    {doc.status?.toLowerCase() === 'error' && (
-                      <button
-                        onClick={() => handleRetryProcessing(doc.id)}
-                        style={styles.actionButton}
-                      >
-                        Retry Processing
-                      </button>
-                    )}
+                    </div>
                     {doc.error && (
                       <div style={styles.errorMessage}>
                         Error: {doc.error}
