@@ -31,19 +31,27 @@ async function storeDebugData(userId, prompt, response) {
 /**
  * Formats all document data using a single OpenAI API call to ensure consistent structure
  * @param {string} userId - The user ID
+ * @param {boolean} forceProcess - Whether to force processing regardless of conditions
  * @returns {Promise<Object>} Formatted data for calculations and predictions
  */
-exports.formatDocumentsData = async (userId) => {
-  console.log(`====== FORMAT DOCUMENTS DATA CALLED - USER ID: ${userId} ======`);
+exports.formatDocumentsData = async (userId, forceProcess = false) => {
+  console.log(`====== FORMAT DOCUMENTS DATA CALLED - USER ID: ${userId}, FORCE: ${forceProcess} ======`);
   
   try {
     // Get all documents with extracted text
     const db = admin.firestore();
     const documentsRef = db.collection('users').doc(userId).collection('documents');
-    const snapshot = await documentsRef.where('status', '==', 'extracted').get();
+    
+    // If forceProcess is true, get all documents regardless of status
+    // Otherwise, only get documents with 'extracted' status
+    const query = forceProcess 
+      ? documentsRef.where('status', 'in', ['extracted', 'uploaded'])
+      : documentsRef.where('status', '==', 'extracted');
+    
+    const snapshot = await query.get();
     
     if (snapshot.empty) {
-      console.log('No extracted documents found for formatting');
+      console.log('No documents found for formatting');
       return null;
     }
     
@@ -279,7 +287,8 @@ async function updateDocumentStatus(userId, documents) {
     
     const docRef = db.collection('users').doc(userId).collection('documents').doc(doc.id);
     
-    if (docData.status?.toLowerCase() === 'extracted') {
+    // Process documents with 'extracted' or 'uploaded' status
+    if (docData.status?.toLowerCase() === 'extracted' || docData.status?.toLowerCase() === 'uploaded') {
       batch.update(docRef, { 
         status: 'processed',
         processedAt: admin.firestore.FieldValue.serverTimestamp()

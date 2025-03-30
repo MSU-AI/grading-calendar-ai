@@ -21,6 +21,7 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
   const { currentUser } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isFormatting, setIsFormatting] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [processingComplete, setProcessingComplete] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
@@ -118,6 +119,37 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     doc.status?.toLowerCase() === 'processed'
   );
 
+  // Handle manual processing
+  const handleProcessDocuments = async () => {
+    if (!currentUser) return;
+    
+    setIsProcessing(true);
+    setError(null);
+    setStatus('Processing documents...');
+    
+    try {
+      const formatDocumentsData = httpsCallable(functions, 'formatDocumentsData');
+      const result = await formatDocumentsData({
+        forceProcess: true // Add this flag to bypass any waiting checks
+      });
+      
+      if ((result.data as any).success) {
+        setStatus('Documents processed successfully');
+        if (onProcessingComplete) {
+          onProcessingComplete();
+          setProcessingComplete(true);
+        }
+      } else {
+        setError((result.data as any).message || 'Failed to process documents');
+      }
+    } catch (err: any) {
+      console.error('Error processing documents:', err);
+      setError(`Processing failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   // Handle manual formatting
   const handleFormatDocuments = async () => {
     if (!currentUser) return;
@@ -153,7 +185,9 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     try {
       // We'll use the formatDocumentsData function to process all documents
       const formatDocumentsData = httpsCallable(functions, 'formatDocumentsData');
-      const result = await formatDocumentsData({});
+      const result = await formatDocumentsData({
+        forceProcess: true // Add this flag to bypass any waiting checks
+      });
       
       if ((result.data as any).success) {
         setStatus('Document processing initiated successfully');
@@ -322,6 +356,16 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
           </p>
         )}
       </div>
+      
+      {documents.length > 0 && documentCounts.extracted > 0 && (
+        <button 
+          onClick={handleProcessDocuments} 
+          style={styles.processButton}
+          disabled={isProcessing}
+        >
+          {isProcessing ? 'Processing...' : 'Process Documents'}
+        </button>
+      )}
       
       {canFormat && (
         <div>
@@ -518,6 +562,17 @@ const styles = {
     cursor: 'pointer',
     fontSize: '16px',
     marginBottom: '20px',
+  },
+  processButton: {
+    backgroundColor: '#4a148c',
+    color: 'white',
+    border: 'none',
+    padding: '10px 20px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    marginBottom: '20px',
+    marginRight: '10px',
   },
   documentsList: {
     marginTop: '20px',
