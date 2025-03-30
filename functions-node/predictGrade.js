@@ -1,6 +1,9 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const OpenAI = require('openai');
+const { getLetterGrade } = require('./utils/gradeUtils');
+const { getOpenAIApiKey } = require('./utils/apiUtils');
+const { calculateExactGradeStatistics, formatDataForAIPrediction } = require('./utils/calculationUtils');
 
 /**
  * Cloud Function to predict final grade using AI
@@ -61,48 +64,6 @@ exports.predictFinalGrade = functions.https.onCall(async (data, context) => {
   }
 });
 
-/**
- * Format data specifically for AI prediction prompt
- * @param {Object} structuredData - Raw structured data
- * @param {Object} currentCalculation - Current grade calculation
- * @returns {Object} Formatted data for AI prompt
- */
-function formatDataForAIPrediction(structuredData, currentCalculation) {
-  return {
-    // Course information
-    course: structuredData.course || {
-      name: "Unknown Course",
-      instructor: "Unknown Instructor",
-      creditHours: "3"
-    },
-    
-    // Grade weights
-    gradeWeights: structuredData.gradeWeights || [],
-    
-    // Current performance
-    currentPerformance: {
-      current_grade: currentCalculation.current_grade,
-      letter_grade: currentCalculation.letter_grade,
-      max_possible_grade: currentCalculation.max_possible_grade,
-      min_possible_grade: currentCalculation.min_possible_grade
-    },
-    
-    // Categorized grades with details
-    categories: currentCalculation.categorized_grades,
-    
-    // Previous academic history
-    academicHistory: structuredData.academicHistory || {
-      overall_gpa: structuredData.gpa || "Unknown",
-      relevantCourses: []
-    },
-    
-    // Due dates and upcoming assignments
-    dueDates: structuredData.dueDates || [],
-    
-    // Request format version (for future compatibility)
-    formatVersion: "1.0"
-  };
-}
 
 /**
  * Get AI prediction using OpenAI
@@ -252,21 +213,6 @@ async function storePrediction(userId, structuredData, calculation, prediction) 
   }
 }
 
-/**
- * Get OpenAI API key from environment
- * @returns {string} API key
- */
-function getOpenAIApiKey() {
-  const apiKey = process.env.OPENAI_API_KEY || 
-                (functions.config().openai && functions.config().openai.apikey);
-  
-  if (!apiKey) {
-    console.error('OpenAI API key not found in environment or Firebase config');
-    throw new Error('OpenAI API key not configured. Please set OPENAI_API_KEY or firebase config openai.apikey');
-  }
-  
-  return apiKey;
-}
 
 /**
  * Fetch structured data from Firestore (duplicated from calculateGrade.js)
@@ -313,109 +259,4 @@ async function fetchStructuredDataFromFirestore(userId) {
     console.error(`Error fetching structured data: ${error}`);
     throw error;
   }
-}
-
-/**
- * Calculate grade statistics (simplified duplicate from calculateGrade.js)
- * @param {Object} data - Formatted data
- * @returns {Object} Grade statistics
- */
-function calculateExactGradeStatistics(data) {
-  // Simplified implementation to avoid code duplication
-  // In production, consider importing from a shared module
-  const { gradeWeights, completedAssignments, remainingAssignments } = data;
-  
-  // Initialize tracking variables
-  const categoryStats = {};
-  let totalWeightCovered = 0;
-  
-  // Calculate stats for each category
-  gradeWeights.forEach(category => {
-    const categoryAssignments = completedAssignments.filter(
-      a => a.category === category.name
-    );
-    
-    const categoryRemaining = remainingAssignments.filter(
-      a => a.category === category.name
-    );
-    
-    // Calculate total points and max possible in this category
-    let totalPoints = 0;
-    let maxPoints = 0;
-    
-    categoryAssignments.forEach(assignment => {
-      // Handle numeric grades and special cases like "Dropped"
-      if (typeof assignment.grade === 'number') {
-        totalPoints += assignment.grade;
-        maxPoints += assignment.maxPoints || 100;
-      } else if (assignment.grade !== 'Dropped') {
-        const numericGrade = parseFloat(assignment.grade);
-        if (!isNaN(numericGrade)) {
-          totalPoints += numericGrade;
-          maxPoints += assignment.maxPoints || 100;
-        }
-      }
-    });
-    
-    // Calculate category average
-    const categoryAverage = maxPoints > 0 ? (totalPoints / maxPoints) * 100 : null;
-    
-    // Store stats
-    categoryStats[category.name] = {
-      completed: categoryAssignments,
-      remaining: categoryRemaining,
-      totalPoints,
-      maxPoints,
-      average: categoryAverage,
-      weight: category.weight
-    };
-    
-    // Add to total weight if we have assignments in this category
-    if (maxPoints > 0) {
-      totalWeightCovered += category.weight;
-    }
-  });
-  
-  // Calculate overall current grade
-  let currentGradeWeighted = 0;
-  
-  Object.values(categoryStats).forEach(stats => {
-    if (stats.average !== null) {
-      // Scale by weight
-      currentGradeWeighted += (stats.average / 100) * stats.weight;
-    }
-  });
-  
-  // Normalize by covered weight if needed
-  const currentGrade = totalWeightCovered > 0 
-    ? (currentGradeWeighted / totalWeightCovered) * 100
-    : 0;
-  
-  // Return simplified calculation
-  return {
-    current_grade: currentGrade,
-    current_percentage: currentGrade,
-    letter_grade: getLetterGrade(currentGrade),
-    max_possible_grade: 100,
-    min_possible_grade: currentGrade,
-    categorized_grades: categoryStats
-  };
-}
-
-/**
- * Get letter grade from numeric value (duplicate)
- */
-function getLetterGrade(grade) {
-  if (grade >= 93) return 'A';
-  if (grade >= 90) return 'A-';
-  if (grade >= 87) return 'B+';
-  if (grade >= 83) return 'B';
-  if (grade >= 80) return 'B-';
-  if (grade >= 77) return 'C+';
-  if (grade >= 73) return 'C';
-  if (grade >= 70) return 'C-';
-  if (grade >= 67) return 'D+';
-  if (grade >= 63) return 'D';
-  if (grade >= 60) return 'D-';
-  return 'F';
 }

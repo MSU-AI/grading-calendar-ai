@@ -128,12 +128,6 @@ const PredictionPanel: React.FC = () => {
   // Determine if we can make a prediction based on document status or processing completion
   const canPredict = documents.some(doc => doc.status === 'processed') || processingComplete;
   
-  // We'll keep this comment to document what we're calculating, but remove the unused variable
-  // Get count of documents by type
-  // const docCounts = documents.reduce((acc: Record<string, number>, doc) => {
-  //   acc[doc.documentType] = (acc[doc.documentType] || 0) + 1;
-  //   return acc;
-  // }, {});
 
   return (
     <div style={styles.container}>

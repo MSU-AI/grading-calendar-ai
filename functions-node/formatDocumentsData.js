@@ -1,7 +1,8 @@
 const OpenAI = require('openai');
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
-const { DOCUMENT_TYPES, normalizeDocumentType } = require('./constants/documentTypes');
+const { DOCUMENT_TYPES, normalizeDocumentType } = require('./utils/documentUtils');
+const { getOpenAIApiKey } = require('./utils/apiUtils');
 
 /**
  * Store debugging data in Firestore
@@ -411,18 +412,4 @@ function extractGradeWeights(text) {
     console.error("Error extracting grade weights:", error);
     return [];
   }
-}
-
-/**
- * Helper function to get OpenAI API key
- */
-function getOpenAIApiKey() {
-  const apiKey = process.env.OPENAI_API_KEY || 
-                (functions.config && functions.config().openai && functions.config().openai.apikey);
-  
-  if (!apiKey) {
-    throw new Error('OpenAI API key not configured. Please set OPENAI_API_KEY or firebase config openai.apikey');
-  }
-  
-  return apiKey;
 }
