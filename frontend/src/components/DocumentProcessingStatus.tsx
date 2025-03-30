@@ -128,10 +128,8 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     setStatus('Processing documents...');
     
     try {
-      const formatDocumentsData = httpsCallable(functions, 'formatDocumentsData');
-      const result = await formatDocumentsData({
-        forceProcess: true // Add this flag to bypass any waiting checks
-      });
+      const processDocuments = httpsCallable(functions, 'processDocuments');
+      const result = await processDocuments({});
       
       if ((result.data as any).success) {
         setStatus('Documents processed successfully');
@@ -183,10 +181,10 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     setError(null);
     
     try {
-      // We'll use the formatDocumentsData function to process all documents
-      const formatDocumentsData = httpsCallable(functions, 'formatDocumentsData');
-      const result = await formatDocumentsData({
-        forceProcess: true // Add this flag to bypass any waiting checks
+      // Use the processDocuments function to process documents
+      const processDocuments = httpsCallable(functions, 'processDocuments');
+      const result = await processDocuments({
+        documentId: documentId // Pass the specific document ID to process
       });
       
       if ((result.data as any).success) {

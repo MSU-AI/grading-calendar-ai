@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirestore, collection, doc, getDoc, getDocs, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import DOCUMENT_TYPES, { DocumentType } from '../constants/documentTypes';
 
 interface Document {
   id: string;
@@ -19,7 +20,7 @@ interface Prediction {
 const DocumentUploader: React.FC = () => {
   const { currentUser } = useAuth();
   const [file, setFile] = useState<File | null>(null);
-  const [documentType, setDocumentType] = useState<string>('syllabus');
+  const [documentType, setDocumentType] = useState<string>(DOCUMENT_TYPES.SYLLABUS);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -37,7 +38,7 @@ const DocumentUploader: React.FC = () => {
     // Get user's documents
     const getUserDocuments = async () => {
       try {
-        const getUserDocumentsFunction = httpsCallable(functions, 'get_user_documents');
+        const getUserDocumentsFunction = httpsCallable(functions, 'getUserDocuments');
         const result = await getUserDocumentsFunction({});
         if (result.data && (result.data as any).success) {
           setDocuments((result.data as any).documents || []);
@@ -94,8 +95,8 @@ const DocumentUploader: React.FC = () => {
         const base64String = fileReader.result as string;
         
         try {
-          // Call upload_and_process_document cloud function
-          const uploadAndProcessDocument = httpsCallable(functions, 'upload_and_process_document');
+          // Call uploadDocument cloud function
+          const uploadAndProcessDocument = httpsCallable(functions, 'uploadDocument');
           const result = await uploadAndProcessDocument({
             documentType: documentType,
             documentBase64: base64String
@@ -224,8 +225,8 @@ const DocumentUploader: React.FC = () => {
         credit_hours: syllabusData.credit_hours || '3'
       };
       
-      // Call predict_final_grade cloud function
-      const predictFinalGrade = httpsCallable(functions, 'predict_final_grade');
+      // Call predictFinalGrade cloud function
+      const predictFinalGrade = httpsCallable(functions, 'predictFinalGrade');
       const result = await predictFinalGrade({ courseData });
       
       const data = result.data as any;
@@ -236,7 +237,7 @@ const DocumentUploader: React.FC = () => {
         setIsUploading(false);
         
         // Refresh documents list
-        const getUserDocuments = httpsCallable(functions, 'get_user_documents');
+        const getUserDocuments = httpsCallable(functions, 'getUserDocuments');
         const docsResult = await getUserDocuments({});
         if (docsResult.data && (docsResult.data as any).success) {
           setDocuments((docsResult.data as any).documents || []);
@@ -295,8 +296,10 @@ const DocumentUploader: React.FC = () => {
                 style={styles.select}
                 disabled={isUploading}
               >
-                <option value="syllabus">Syllabus</option>
-                <option value="transcript">Transcript</option>
+                <option value={DOCUMENT_TYPES.SYLLABUS}>Syllabus</option>
+                <option value={DOCUMENT_TYPES.TRANSCRIPT}>Transcript</option>
+                <option value={DOCUMENT_TYPES.GRADES}>Grades</option>
+                <option value={DOCUMENT_TYPES.OTHER}>Other</option>
               </select>
             </div>
             

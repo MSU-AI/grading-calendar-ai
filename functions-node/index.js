@@ -4,10 +4,12 @@ const pdfParse = require('pdf-parse');
 const tmp = require('tmp');
 const fs = require('fs');
 const OpenAI = require('openai');
+const cors = require('cors')({ origin: true });
 const { calculateCurrentGrade } = require('./calculateGrade');
 const { predictFinalGrade } = require('./predictGrade');
 const { formatDocumentsData } = require('./formatDocumentsData');
 const { DOCUMENT_TYPES, normalizeDocumentType } = require('./utils/documentUtils');
+const corsMiddleware = require('./utils/corsMiddleware');
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -15,6 +17,94 @@ admin.initializeApp();
 // Export functions
 exports.calculateCurrentGrade = calculateCurrentGrade;
 exports.predictFinalGrade = predictFinalGrade;
+
+/**
+ * Cloud Function to trigger processing of documents
+ * This handles the extraction and formatting of document data
+ * Can process all documents or a specific document if documentId is provided
+ */
+exports.processDocuments = functions.https.onCall(async (data, context) => {
+  try {
+    // Ensure user is authenticated
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+    }
+    
+    const userId = context.auth.uid;
+    const specificDocumentId = data?.documentId;
+    
+    console.log(`Processing documents for user ${userId}${specificDocumentId ? `, document ID: ${specificDocumentId}` : ''}`);
+    
+    // Get documents that need processing
+    const db = admin.firestore();
+    const documentsRef = db.collection('users').doc(userId).collection('documents');
+    
+    let snapshot;
+    if (specificDocumentId) {
+      // If a specific document ID is provided, only process that document
+      const docRef = documentsRef.doc(specificDocumentId);
+      const docSnapshot = await docRef.get();
+      
+      if (!docSnapshot.exists) {
+        throw new functions.https.HttpsError('not-found', 'Document not found');
+      }
+      
+      // Create a QuerySnapshot-like object with a single document
+      snapshot = {
+        empty: false,
+        size: 1,
+        docs: [docSnapshot],
+        forEach: (callback) => callback(docSnapshot)
+      };
+    } else {
+      // Otherwise, get all documents that need processing
+      const query = documentsRef.where('status', 'in', ['uploaded', 'extracted']);
+      snapshot = await query.get();
+    }
+    
+    if (snapshot.empty) {
+      return {
+        success: false,
+        message: 'No documents found for processing'
+      };
+    }
+    
+    console.log(`Found ${snapshot.size} documents to process`);
+    
+    // Process each document
+    const processPromises = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      
+      // If document is uploaded but not extracted, extract text
+      if (data.status === 'uploaded' && data.filePath) {
+        processPromises.push(extractTextFromPdf(userId, doc.id, data.filePath));
+      }
+      // If document is extracted but not processed, update status
+      else if (data.status === 'extracted') {
+        const docRef = db.collection('users').doc(userId).collection('documents').doc(doc.id);
+        processPromises.push(docRef.update({
+          status: 'processing',
+          processingStartedAt: admin.firestore.FieldValue.serverTimestamp()
+        }));
+      }
+    });
+    
+    await Promise.all(processPromises);
+    
+    // Once all documents are processed, format the data
+    const formattedData = await formatDocumentsData(userId, true);
+    
+    return {
+      success: true,
+      message: 'Documents processed successfully',
+      documentsProcessed: snapshot.size
+    };
+  } catch (error) {
+    console.error('Error processing documents:', error);
+    throw new functions.https.HttpsError('internal', `Processing failed: ${error.message}`);
+  }
+});
 exports.formatDocumentsData = functions.https.onCall(async (data, context) => {
   try {
     // Ensure user is authenticated

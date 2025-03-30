@@ -20,6 +20,7 @@ const DocumentManager: React.FC = () => {
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [status, setStatus] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [documentType, setDocumentType] = useState<DocumentType>(DOCUMENT_TYPES.SYLLABUS);
   
   const functions = getFunctions();
 
@@ -49,6 +50,10 @@ const DocumentManager: React.FC = () => {
     if (e.target.files) {
       setFiles(Array.from(e.target.files));
     }
+  };
+
+  const handleTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setDocumentType(e.target.value as DocumentType);
   };
 
   const handleUpload = async (e: React.FormEvent) => {
@@ -155,6 +160,22 @@ const DocumentManager: React.FC = () => {
       
       <form onSubmit={handleUpload} style={styles.form}>
         <div style={styles.fileInputContainer}>
+          <label htmlFor="documentType" style={styles.fileInputLabel}>
+            Document Type:
+          </label>
+          <select
+            id="documentType"
+            value={documentType}
+            onChange={handleTypeChange}
+            style={styles.select}
+            disabled={isUploading}
+          >
+            <option value={DOCUMENT_TYPES.SYLLABUS}>Syllabus</option>
+            <option value={DOCUMENT_TYPES.TRANSCRIPT}>Transcript</option>
+            <option value={DOCUMENT_TYPES.GRADES}>Grades</option>
+            <option value={DOCUMENT_TYPES.OTHER}>Other</option>
+          </select>
+          
           <label htmlFor="fileInput" style={styles.fileInputLabel}>
             Select Documents
           </label>
@@ -261,6 +282,13 @@ const styles = {
     marginBottom: '5px',
     fontWeight: 'bold',
     color: '#555',
+  },
+  select: {
+    padding: '10px',
+    borderRadius: '4px',
+    border: '1px solid #ddd',
+    fontSize: '16px',
+    marginBottom: '15px',
   },
   fileInput: {
     padding: '10px 0',
