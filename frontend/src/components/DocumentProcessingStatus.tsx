@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getFirestore, collection, query, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, query, onSnapshot, doc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import DOCUMENT_TYPES, { DocumentType } from '../constants/documentTypes';
 
