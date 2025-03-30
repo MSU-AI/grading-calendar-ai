@@ -603,4 +603,4 @@ function extractGpaFromText(text) {
 }
 
 // Add to exports
-exports.processExtractedText = processExtractedText;
+
