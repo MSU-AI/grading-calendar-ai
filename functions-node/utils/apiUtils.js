@@ -19,3 +19,7 @@ function getOpenAIApiKey() {
   
   return apiKey;
 }
+
+module.exports = {
+  getOpenAIApiKey
+};
