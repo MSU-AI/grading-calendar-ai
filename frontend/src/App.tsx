@@ -5,6 +5,7 @@ import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import Navbar from './components/Navbar';
 import PrivateRoute from './components/PrivateRoute';
+import LandingPage from './components/LandingPage'
 import './App.css';
 
 function App() {
@@ -13,7 +14,7 @@ function App() {
       <AuthProvider>
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
           <Routes>
-            <Route path="/" element={<Login />} />
+            <Route path="/" element={<LandingPage />} />
             <Route
               path="/dashboard"
               element={

@@ -8,5 +8,8 @@
     "test": "cd frontend && npm test",
     "deploy": "firebase deploy"
   },
-  "private": true
+  "private": true,
+  "dependencies": {
+    "react-helmet": "^6.1.0"
+  }
 }
