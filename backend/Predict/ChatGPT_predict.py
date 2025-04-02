@@ -45,7 +45,9 @@ def construct_prompt(course_data):
     prompt_lines.append(
         "Based on these details, predict the student's final grade. "
         "Output exactly in JSON format with two keys: 'grade' (a numeric value) "
-        "and 'reasoning' (a short explanation). Do not include extra text."
+        "and 'reasoning' (a short explanation that includes which categories "
+        "the student is performing well in, which they are not, and specific "
+        "actions they could take to improve their standing). Do not include extra text."
     )
     
     return "\n".join(prompt_lines)
@@ -53,7 +55,7 @@ def construct_prompt(course_data):
 def get_chatgpt_prediction(prompt):
     """Call the OpenAI API to get a prediction."""
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
+        model="gpt-4o mini",
         messages=[
             {"role": "system", "content": "You are a concise academic advisor."},
             {"role": "user", "content": prompt}

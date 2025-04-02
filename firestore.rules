@@ -27,6 +27,20 @@ service cloud.firestore {
         allow write: if false;
       }
       
+      // Add rules for formatted_data subcollection (new)
+      match /formatted_data/{documentType} {
+        allow read: if isOwner(userId);
+        // Only allow Cloud Functions to write
+        allow write: if false;
+      }
+      
+      // Add rules for data subcollection (used for combined data)
+      match /data/{dataId} {
+        allow read: if isOwner(userId);
+        // Only allow Cloud Functions to write
+        allow write: if false;
+      }
+      
       // Add rules for predictions subcollection
       match /predictions/{predictionId} {
         allow read: if isOwner(userId);

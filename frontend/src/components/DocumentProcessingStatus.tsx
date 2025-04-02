@@ -21,6 +21,7 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
   const { currentUser } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isFormatting, setIsFormatting] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [processingComplete, setProcessingComplete] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
@@ -75,20 +76,19 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
         console.log('Document counts by type:', documentTypeCount);
         console.log('Document counts by status:', statusCount);
         
-        // Check for processing completion based on processed syllabus
-        const hasSyllabus = docs.some(doc => 
-          doc.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS && 
-          doc.status?.toLowerCase() === 'processed'
-        );
-        
-        console.log('Has processed syllabus:', hasSyllabus);
-        
-        // Trigger completion if we have a processed syllabus
-        if (hasSyllabus && onProcessingComplete && !processingComplete) {
-          console.log('Processing complete condition met - has processed syllabus');
-          onProcessingComplete();
-          setProcessingComplete(true);
-        }
+  // Check for processing completion based on any processed document
+  const hasProcessedDocuments = docs.some(doc => 
+    doc.status?.toLowerCase() === 'processed'
+  );
+  
+  console.log('Has processed documents:', hasProcessedDocuments);
+  
+  // Trigger completion if we have any processed document
+  if (hasProcessedDocuments && onProcessingComplete && !processingComplete) {
+    console.log('Processing complete condition met - has processed documents');
+    onProcessingComplete();
+    setProcessingComplete(true);
+  }
       }
     }, (error) => {
       console.error('Error in document snapshot listener:', error);
@@ -118,7 +118,35 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     doc.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS &&
     doc.status?.toLowerCase() === 'processed'
   );
-  const hasMinimumDocuments = hasSyllabus;
+
+  // Handle manual processing
+  const handleProcessDocuments = async () => {
+    if (!currentUser) return;
+    
+    setIsProcessing(true);
+    setError(null);
+    setStatus('Processing documents...');
+    
+    try {
+      const processDocuments = httpsCallable(functions, 'processDocuments');
+      const result = await processDocuments({});
+      
+      if ((result.data as any).success) {
+        setStatus('Documents processed successfully');
+        if (onProcessingComplete) {
+          onProcessingComplete();
+          setProcessingComplete(true);
+        }
+      } else {
+        setError((result.data as any).message || 'Failed to process documents');
+      }
+    } catch (err: any) {
+      console.error('Error processing documents:', err);
+      setError(`Processing failed: ${err.message || 'Unknown error'}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // Handle manual formatting
   const handleFormatDocuments = async () => {
@@ -153,9 +181,11 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     setError(null);
     
     try {
-      // We'll use the formatDocumentsData function to process all documents
-      const formatDocumentsData = httpsCallable(functions, 'formatDocumentsData');
-      const result = await formatDocumentsData({});
+      // Use the processDocuments function to process documents
+      const processDocuments = httpsCallable(functions, 'processDocuments');
+      const result = await processDocuments({
+        documentId: documentId // Pass the specific document ID to process
+      });
       
       if ((result.data as any).success) {
         setStatus('Document processing initiated successfully');
@@ -192,10 +222,9 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     return progress;
   };
 
+
   const progress = calculateProgress();
   const canFormat = documentCounts.extracted > 0 && !isFormatting;
-  // We'll keep this comment to document what we're checking, but remove the unused variable
-  // const hasErrors = documentCounts.error > 0;
 
   return (
     <div style={styles.container}>
@@ -245,7 +274,7 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
           <div style={styles.documentTypeItem}>
             <span style={styles.documentTypeLabel}>Syllabus</span>
             <span style={styles.documentTypeCount}>{documentTypeCount.syllabus}</span>
-            {!hasSyllabus && <span style={styles.documentTypeWarning}>Required</span>}
+            {!hasSyllabus && <span style={{...styles.documentTypeWarning, color: '#ff9800'}}>Recommended</span>}
           </div>
           <div style={styles.documentTypeItem}>
             <span style={styles.documentTypeLabel}>Transcript</span>
@@ -257,21 +286,33 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
           </div>
         </div>
         
-        {!hasMinimumDocuments && (
+        {documents.length === 0 && (
           <p style={styles.warningMessage}>
-            You need to upload at least a syllabus document to enable processing.
+            Upload documents to begin processing. A syllabus is recommended but not required.
           </p>
         )}
       </div>
       
-      {canFormat && (
+      {documents.length > 0 && documentCounts.extracted > 0 && (
         <button 
-          onClick={handleFormatDocuments} 
-          style={styles.formatButton}
-          disabled={isFormatting}
+          onClick={handleProcessDocuments} 
+          style={styles.processButton}
+          disabled={isProcessing}
         >
-          {isFormatting ? 'Formatting...' : 'Format Documents'}
+          {isProcessing ? 'Processing...' : 'Process Documents'}
         </button>
+      )}
+      
+      {canFormat && (
+        <div>
+          <button 
+            onClick={handleFormatDocuments} 
+            style={styles.formatButton}
+            disabled={isFormatting}
+          >
+            {isFormatting ? 'Formatting...' : 'Format Documents'}
+          </button>
+        </div>
       )}
       
       {documents.length > 0 && (
@@ -302,22 +343,24 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
                     </span>
                   </td>
                   <td style={styles.tableCell}>
-                    {doc.status?.toLowerCase() === 'uploaded' && (
-                      <button
-                        onClick={() => handleRetryProcessing(doc.id)}
-                        style={styles.actionButton}
-                      >
-                        Process Document
-                      </button>
-                    )}
-                    {doc.status?.toLowerCase() === 'error' && (
-                      <button
-                        onClick={() => handleRetryProcessing(doc.id)}
-                        style={styles.actionButton}
-                      >
-                        Retry Processing
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      {doc.status?.toLowerCase() === 'uploaded' && (
+                        <button
+                          onClick={() => handleRetryProcessing(doc.id)}
+                          style={styles.actionButton}
+                        >
+                          Process Document
+                        </button>
+                      )}
+                      {doc.status?.toLowerCase() === 'error' && (
+                        <button
+                          onClick={() => handleRetryProcessing(doc.id)}
+                          style={styles.actionButton}
+                        >
+                          Retry Processing
+                        </button>
+                      )}
+                    </div>
                     {doc.error && (
                       <div style={styles.errorMessage}>
                         Error: {doc.error}
@@ -443,6 +486,17 @@ const styles = {
     cursor: 'pointer',
     fontSize: '16px',
     marginBottom: '20px',
+  },
+  processButton: {
+    backgroundColor: '#4a148c',
+    color: 'white',
+    border: 'none',
+    padding: '10px 20px',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    fontSize: '16px',
+    marginBottom: '20px',
+    marginRight: '10px',
   },
   documentsList: {
     marginTop: '20px',
