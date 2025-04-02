@@ -58,16 +58,18 @@ async function getFormattedDocumentData(userId, documentType) {
  * @returns {Promise<Object>} JSON response from OpenAI
  */
 async function callOpenAIForFormatting(prompt) {
-  // Get OpenAI API key
-  const apiKey = getOpenAIApiKey();
-  
-  // Initialize OpenAI client
-  const openai = new OpenAI({
-    apiKey: apiKey
-  });
-  
-  console.log("Calling OpenAI API for formatting");
   try {
+    // Get OpenAI API key
+    console.log("Attempting to get OpenAI API key");
+    const apiKey = getOpenAIApiKey();
+    console.log("Successfully retrieved API key");
+    
+    // Initialize OpenAI client
+    const openai = new OpenAI({
+      apiKey: apiKey
+    });
+    
+    console.log("Calling OpenAI API for formatting");
     // Call OpenAI with strict instruction for JSON
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -78,24 +80,28 @@ async function callOpenAIForFormatting(prompt) {
         },
         { role: "user", content: prompt }
       ],
-      temperature: 0.1, // Low temperature for consistency
-      response_format: { type: "json_object" } // Enforces JSON response
+      temperature: 0.1,
+      response_format: { type: "json_object" }
     });
     
-    // Extract the JSON response
-    const responseContent = response.choices[0].message.content;
     console.log("OpenAI response received");
+    const responseContent = response.choices[0].message.content;
     
     try {
       // Parse JSON
-      return JSON.parse(responseContent);
+      const parsed = JSON.parse(responseContent);
+      console.log("Successfully parsed OpenAI response into JSON");
+      return parsed;
     } catch (parseError) {
       console.error("Error parsing OpenAI response:", parseError);
-      console.error("Raw response:", responseContent);
+      console.error("Raw response (first 100 chars):", responseContent.substring(0, 100));
       throw new Error("Failed to parse OpenAI response");
     }
   } catch (error) {
-    console.error("Error calling OpenAI API:", error);
+    console.error("Error in OpenAI API call:", error.message);
+    if (error.response) {
+      console.error("OpenAI API error details:", error.response.data);
+    }
     throw error;
   }
 }
