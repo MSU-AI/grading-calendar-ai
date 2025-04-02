@@ -1,17 +1,16 @@
-const functions = require('firebase-functions');
+const functions = require('firebase-functions/v2');
 
 /**
- * Get OpenAI API key from Firebase configuration or environment variable
+ * Get OpenAI API key from Firebase secrets
  * @returns {string} API key
  * @throws {Error} If API key is not configured
  */
 function getOpenAIApiKey() {
-  const apiKey = process.env.OPENAI_API_KEY || 
-                (functions.config().openai && functions.config().openai.apikey);
+  const apiKey = functions.params.OPENAI_API_KEY;
   
   if (!apiKey) {
-    console.error('OpenAI API key not found in environment or Firebase config');
-    throw new Error('OpenAI API key not configured. Please set OPENAI_API_KEY or firebase config openai.apikey');
+    console.error('OpenAI API key not found in Firebase secrets');
+    throw new Error('OpenAI API key not configured');
   }
   
   return apiKey;
