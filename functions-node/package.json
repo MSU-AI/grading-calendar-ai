@@ -3,7 +3,7 @@
   "description": "Node.js Firebase Functions for PDF Processing",
   "main": "index.js",
   "engines": {
-    "node": "18"
+    "node": "20"
   },
   "dependencies": {
     "firebase-admin": "^11.8.0",
