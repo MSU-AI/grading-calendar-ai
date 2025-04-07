@@ -113,7 +113,7 @@ RESPOND ONLY WITH VALID JSON IN THIS EXACT FORMAT:
 {
   "grade": "B+",
   "numerical_grade": 87.5,
-  "reasoning": "Concise explanation of your prediction"
+  "reasoning": "Concise explanation of your prediction with reasoning and explanation of what specefically can be improved to achieve a higher grade."
 }
 `;
 
