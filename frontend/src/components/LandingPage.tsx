@@ -13,7 +13,7 @@ const GradingAILanding = () => {
 
   const handleSignIn = async () => {
     try {
-      navigate('/Login');
+      navigate('/login');
     } catch (error) {
       console.error('Failed to move to log in:', error);
     }
@@ -240,20 +240,22 @@ const GradingAILanding = () => {
             display: 'flex',
             gap: '1rem'
           }}>
-            <button style={{
-              padding: '0.5rem 1.25rem',
-              backgroundColor: 'rgba(174, 185, 225, 0.05)',
-              color: '#AEB9E1',
-              border: '1px solid #7063A7',
-              borderRadius: '4px',
-              fontSize: '0.9rem',
-              cursor: 'pointer',
-              fontFamily: 'Sansation, sans-serif',
-              pointerEvents: 'auto',
-              transition: 'all 0.3s ease',
-            }}
-            className="animated-border">
-              Log In
+            <button 
+              onClick={handleSignIn}
+              style={{
+                padding: '0.5rem 1.25rem',
+                backgroundColor: 'rgba(174, 185, 225, 0.05)',
+                color: '#AEB9E1',
+                border: '1px solid #7063A7',
+                borderRadius: '4px',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                fontFamily: 'Sansation, sans-serif',
+                pointerEvents: 'auto',
+                transition: 'all 0.3s ease',
+              }}
+              className="animated-border">
+                Log In
             </button>
             <button onClick = {handleSignIn} style={{
               padding: '0.5rem 1.25rem',
@@ -308,23 +310,25 @@ const GradingAILanding = () => {
           }}>
             Get personalized predictions and actionable tips to improve your performance and achieve your academic goals.
           </p>
-          <button style={{
-            padding: '0.9rem 2.5rem',
-            background: 'linear-gradient(90deg, #7063A7, #6157FF)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            fontSize: '1.1rem',
-            cursor: 'pointer',
-            fontWeight: 600,
-            fontFamily: 'Sansation, sans-serif',
-            pointerEvents: 'auto',
-            boxShadow: '0 4px 15px rgba(97, 87, 255, 0.4)',
-            position: 'relative',
-            overflow: 'hidden',
-            transition: 'all 0.3s ease'
-          }}>
-            Get Started Today
+          <button 
+            onClick={handleSignIn}
+            style={{
+              padding: '0.9rem 2.5rem',
+              background: 'linear-gradient(90deg, #7063A7, #6157FF)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              fontSize: '1.1rem',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontFamily: 'Sansation, sans-serif',
+              pointerEvents: 'auto',
+              boxShadow: '0 4px 15px rgba(97, 87, 255, 0.4)',
+              position: 'relative',
+              overflow: 'hidden',
+              transition: 'all 0.3s ease'
+            }}>
+              Get Started Today
           </button>
         </div>
 
