@@ -1,33 +1,11 @@
 import React, { useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import DocumentManager from './DocumentManager';
 import PredictionPanel from './PredictionPanel';
 const Dashboard: React.FC = () => {
-  const { currentUser, logout } = useAuth();
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>('documents');
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/');
-    } catch (error) {
-      console.error('Failed to log out:', error);
-    }
-  };
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>Academic Performance Predictor</h1>
-        <div style={styles.userInfo}>
-          <span style={styles.userEmail}>{currentUser?.email}</span>
-          <button onClick={handleLogout} style={styles.logoutButton}>
-            Logout
-          </button>
-        </div>
-      </div>
       
       <div style={styles.tabs}>
         <button 

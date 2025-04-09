@@ -1,7 +1,6 @@
-import React, { useState, useEffect  } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-
 
 declare global {
   interface Window {
@@ -21,18 +20,47 @@ const Login: React.FC = () => {
     // Add global styles
     const styleTag = document.createElement('style');
     styleTag.innerHTML = `
+      @font-face {
+        font-family: 'Sansation';
+        src: url('https://fonts.cdnfonts.com/css/sansation') format('woff2');
+        font-weight: 400;
+        font-style: normal;
+      }
+      
       body {
         margin: 0;
-        background-color: #130A39;
-        overflow: hidden;
+        background: linear-gradient(135deg, #130A39 0%, #1F0F5C 50%, #341873 100%);
+        overflow-x: hidden;
+        font-family: 'Sansation', sans-serif;
       }
+      
       #particles-js {
         position: fixed;
         width: 100%;
         height: 100%;
         top: 0;
         left: 0;
-        z-index: -1;
+        z-index: 0;
+      }
+      
+      .glow {
+        filter: drop-shadow(0 0 8px rgba(174, 185, 225, 0.6));
+      }
+      
+      @keyframes gradientBorder {
+        0% { border-color: #7063A7; }
+        50% { border-color: #9A8BD0; }
+        100% { border-color: #7063A7; }
+      }
+      
+      
+      .card-hover {
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+      
+      .card-hover:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
       }
     `;
     document.head.appendChild(styleTag);
@@ -53,7 +81,7 @@ const Login: React.FC = () => {
             }
           },
           "color": {
-            "value": "#ffffff"
+            "value": ["#AEB9E1", "#9A8BD0", "#7063A7", "#6157FF"]
           },
           "shape": {
             "type": "circle",
@@ -66,17 +94,17 @@ const Login: React.FC = () => {
             }
           },
           "opacity": {
-            "value": 0.5,
-            "random": false,
+            "value": 0.6,
+            "random": true,
             "anim": {
-              "enable": false,
+              "enable": true,
               "speed": 1,
               "opacity_min": 0.1,
               "sync": false
             }
           },
           "size": {
-            "value": 3,
+            "value": 4,
             "random": true,
             "anim": {
               "enable": false,
@@ -88,7 +116,7 @@ const Login: React.FC = () => {
           "line_linked": {
             "enable": true,
             "distance": 150,
-            "color": "#ffffff",
+            "color": "#AEB9E1",
             "opacity": 0.4,
             "width": 1
           },
@@ -154,7 +182,8 @@ const Login: React.FC = () => {
     // Cleanup
     return () => {
       document.head.removeChild(styleTag);
-      document.body.removeChild(script);
+      const scriptElement = document.querySelector('script[src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"]');
+      if (scriptElement) document.body.removeChild(scriptElement);
     };
   }, []);
 
@@ -184,6 +213,17 @@ const Login: React.FC = () => {
       console.error(err);
     }
   };
+
+  // Google G logo SVG
+  const GoogleLogo = () => (
+    <svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      <path fill="none" d="M0 0h48v48H0z"/>
+    </svg>
+  );
 
   return (
     <>
@@ -218,7 +258,10 @@ const Login: React.FC = () => {
           </form>
 
           <button onClick={handleGoogleSignIn} style={styles.googleButton}>
-            Sign in with Google
+            <div style={styles.googleButtonContent}>
+              <GoogleLogo />
+              <span style={styles.googleButtonText}>Sign in with Google</span>
+            </div>
           </button>
 
           <p style={styles.toggle}>
@@ -245,9 +288,9 @@ const styles = {
   },
   card: {
     padding: '2rem',
-    backgroundColor: 'white',
+    backgroundColor: '#1E1350',
     borderRadius: '8px',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    boxShadow: '0px 0px 20px 8px  #3E28A2',
     width: '100%',
     maxWidth: '400px',
     zIndex: 1,
@@ -255,7 +298,7 @@ const styles = {
   title: {
     textAlign: 'center' as const,
     marginBottom: '1.5rem',
-    color: '#333',
+    color: '#AEB9E1',
   },
   form: {
     display: 'flex',
@@ -264,28 +307,48 @@ const styles = {
   },
   input: {
     padding: '0.75rem',
+    backgroundColor: '#130A39',
     borderRadius: '4px',
-    border: '1px solid #ddd',
+    border: '1px solid rgba(174, 185, 225, 0.4)',
     fontSize: '1rem',
+    color: '#AEB9E1',
   },
   button: {
     padding: '0.75rem',
-    backgroundColor: '#007bff',
-    color: 'white',
+    backgroundColor: '#7063A7',
+    color: '#AEB9E1',
     border: 'none',
     borderRadius: '4px',
     fontSize: '1rem',
     cursor: 'pointer',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   googleButton: {
     marginTop: '1rem',
     padding: '0.75rem',
-    backgroundColor: '#fff',
-    color: '#333',
-    border: '1px solid #ddd',
+    backgroundColor: 'white',
+    color: '#444',
+    border: 'none',
     borderRadius: '4px',
     fontSize: '1rem',
     cursor: 'pointer',
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+  },
+  googleButtonContent: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  googleButtonText: {
+    marginLeft: '10px',
+    fontWeight: '500' as const,
   },
   error: {
     color: '#dc3545',
@@ -295,10 +358,10 @@ const styles = {
   toggle: {
     marginTop: '1rem',
     textAlign: 'center' as const,
-    color: '#666',
+    color: '#AEB9E1',
   },
   toggleLink: {
-    color: '#007bff',
+    color: 'rgb(159, 139, 247)',
     cursor: 'pointer',
   },
 };
