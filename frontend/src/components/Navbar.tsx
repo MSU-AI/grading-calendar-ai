@@ -18,12 +18,23 @@ const Navbar: React.FC = () => {
   return (
     <div style={styles.navbar}>
       <div style={styles.logo}>
-        Academic Performance Predictor
+        Grading AI
       </div>
       {currentUser && (
         <div style={styles.userSection}>
           <span style={styles.userEmail}>{currentUser.email}</span>
-          <button onClick={handleLogout} style={styles.logoutButton}>
+          <button onClick={handleLogout} style={{
+                padding: '0.5rem 1.25rem',
+                backgroundColor: 'rgba(174, 185, 225, 0.05)',
+                color: '#AEB9E1',
+                border: '1px solid #7063A7',
+                borderRadius: '4px',
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                fontFamily: 'Sansation, sans-serif',
+                pointerEvents: 'auto',
+                transition: 'all 0.3s ease',
+              }}>
             Logout
           </button>
         </div>
@@ -38,13 +49,18 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '1rem 2rem',
-    backgroundColor: '#2196F3',
+    background: 'linear-gradient(135deg, #130A39 0%, #1F0F5C 50%, #341873 100%)',
     color: 'white',
     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
   },
   logo: {
-    fontSize: '1.2rem',
-    fontWeight: 'bold' as const,
+    margin: 0,
+    color: 'white',
+    fontSize: '1.5rem',
+    fontWeight: 600,
+    background: 'linear-gradient(90deg, #FFFFFF, #AEB9E1)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent'
   },
   userSection: {
     display: 'flex',
@@ -52,17 +68,8 @@ const styles = {
     gap: '1rem',
   },
   userEmail: {
+    color: '#AEB9E1',
     fontSize: '0.9rem',
-  },
-  logoutButton: {
-    padding: '0.4rem 0.8rem',
-    backgroundColor: 'white',
-    color: '#2196F3',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontWeight: 'bold' as const,
-    fontSize: '0.8rem',
   },
 };
 
