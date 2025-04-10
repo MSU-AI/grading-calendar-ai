@@ -5,8 +5,9 @@ const tmp = require('tmp');
 const fs = require('fs');
 const OpenAI = require('openai');
 const cors = require('cors')({ origin: true });
-const { calculateCurrentGrade } = require('./calculateGrade');
-const { predictFinalGrade } = require('./predictGrade');
+// Import the functions but don't re-export them directly
+const calculateGradeFunctions = require('./calculateGrade');
+const predictGradeFunctions = require('./predictGrade');
 const { formatDocumentsData } = require('./formatDocumentsData');
 const { DOCUMENT_TYPES, normalizeDocumentType } = require('./utils/documentUtils');
 const corsMiddleware = require('./utils/corsMiddleware');
@@ -14,9 +15,23 @@ const corsMiddleware = require('./utils/corsMiddleware');
 // Initialize Firebase Admin
 admin.initializeApp();
 
-// Export functions
-exports.calculateCurrentGrade = calculateCurrentGrade;
-exports.predictFinalGrade = predictFinalGrade;
+// DON'T directly export these functions
+// exports.calculateCurrentGrade = calculateCurrentGrade;
+// exports.predictFinalGrade = predictFinalGrade;
+
+/**
+ * Cloud Function to calculate current grade based on submitted assignments
+ */
+exports.calculateCurrentGrade = functions.https.onCall(async (data, context) => {
+  return calculateGradeFunctions.calculateCurrentGrade(data, context);
+});
+
+/**
+ * Cloud Function to predict final grade using AI
+ */
+exports.predictFinalGrade = functions.https.onCall(async (data, context) => {
+  return predictGradeFunctions.predictFinalGrade(data, context);
+});
 
 /**
  * Cloud Function to trigger processing of documents
@@ -105,6 +120,7 @@ exports.processDocuments = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('internal', `Processing failed: ${error.message}`);
   }
 });
+
 exports.formatDocumentsData = functions.https.onCall(async (data, context) => {
   try {
     // Ensure user is authenticated
