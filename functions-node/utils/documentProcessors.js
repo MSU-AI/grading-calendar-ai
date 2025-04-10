@@ -116,7 +116,7 @@ async function formatGradesData(userId, gradesText) {
       syllabusData.gradeWeights.map(w => `- ${w.name} (${(w.weight * 100).toFixed(0)}%)`).join("\n");
   }
   
-  // Create grades-specific prompt with detection of incomplete assignments
+  // Create grades-specific prompt with improved detection of categories and assignments
   const prompt = `
 I need you to extract both completed and incomplete assignment information from a grades document.
 
@@ -146,30 +146,70 @@ Please extract and format this information into the following exact JSON structu
   "currentGrade": 92.5 // Overall current numerical grade if available
 }
 
+IMPORTANT PARSING INSTRUCTIONS:
+
+1. First, identify all category headers in the document. These are often formatted distinctly and may include:
+   - "Weekly Homework", "In Class", "Reflection & Whiteboard Uploads", "Exams", "Group Projects", etc.
+   - Categories may have an overall grade next to them (e.g., "In Class 4.0")
+   - Categories are usually followed by individual assignments or week-based entries
+
+2. For each category you identify:
+   - Extract EVERY assignment listed under that category
+   - The category name should be used as the "category" field for all assignments under it
+   - Week-based assignments (Week 1, Week 2, etc.) should each be treated as separate assignments
+   - Include the category name in the assignment name (e.g., "In Class - Week 1")
+
+3. Assignment grade formats:
+   - Formats like "93.4 / 100" indicate a score of 93.4 out of 100 points
+   - The first number is the "grade" and the second number is the "maxPoints"
+   - If you see something like "Week 1100 / 100 4.0", parse it as "Week 1" with score "100/100" and grade "4.0"
+   - If you see "Dropped!" next to a grade, still include the assignment but note it was dropped
+   - Entries with "- / 100" or similar indicate incomplete assignments with no grade yet
+
+4. Example parsing:
+   When you see a pattern like:
+   "In Class  4.0
+   Week 1100 / 100 4.0
+   Week 241.7 / 100Dropped!  
+   Week 376.7 / 100 3.0"
+
+   This should be interpreted as:
+   - A category called "In Class" with overall grade 4.0
+   - Completed assignment: "In Class - Week 1" with score 100/100 and grade 4.0
+   - Completed assignment: "In Class - Week 2" with score 41.7/100 (marked as dropped)
+   - Completed assignment: "In Class - Week 3" with score 76.7/100 and grade 3.0
+
+5. For incomplete assignments:
+   - Look for entries with formats like "- / 100", "Not Submitted", or future due dates
+   - Include these in the incompleteAssignments array
+   - Make sure to include the category and maxPoints if available
+
+6. Be thorough and comprehensive:
+   - Process EVERY line in the document that could contain assignment information
+   - Don't skip any assignments, even if they appear unusual or are marked as dropped
+   - Check for assignments at the end of the document that might be separated from their categories
+
+7. For the currentGrade:
+   - Look for an overall grade like "Final Calculated Grade" or similar
+   - Convert percentage grades to numeric values (e.g., 95% becomes 95.0)
+   - If no explicit overall grade is found, leave as null
+
 Example of correct output:
 {
   "completedAssignments": [
-    { "name": "Homework 1", "grade": 95.5, "maxPoints": 100, "category": "Homework" },
-    { "name": "Midterm Exam", "grade": 88.0, "maxPoints": 100, "category": "Exams" }
+    { "name": "Weekly Homework - Week 1 HW", "grade": 21.0, "maxPoints": 21, "category": "Weekly Homework" },
+    { "name": "In Class - Week 1", "grade": 100.0, "maxPoints": 100, "category": "In Class" },
+    { "name": "Exam 1", "grade": 86.75, "maxPoints": 100, "category": "Exams" }
   ],
   "incompleteAssignments": [
-    { "name": "Homework 2", "maxPoints": 100, "category": "Homework", "dueDate": "Mar 15, 2025" },
-    { "name": "Final Exam", "maxPoints": 200, "category": "Exams", "dueDate": null }
+    { "name": "Weekly Homework - Week 10 HW", "maxPoints": 24, "category": "Weekly Homework", "dueDate": null },
+    { "name": "In Class - Week 10", "maxPoints": 100, "category": "In Class", "dueDate": null },
+    { "name": "Final Exam", "maxPoints": 100, "category": "Exams", "dueDate": null }
   ],
-  "currentGrade": 92.5
+  "currentGrade": 90.55
 }
 
-Important:
-1. Convert all percentages to numbers (e.g., 95% becomes 95.0)
-2. Look for assignments that appear in the grades document but have:
-   - No grade yet
-   - "Not Submitted", "Upcoming", "Pending", etc.
-   - Empty grade fields
-   - Future due dates
-   These should all go in the incompleteAssignments array.
-3. Match each assignment to the most appropriate category from the syllabus
-4. If an assignment doesn't match any syllabus category, use your best judgment
-5. Include ALL assignments you can find in the document, both completed and incomplete
+CRITICAL: Ensure you capture ALL assignments from EVERY category in the document. Do not miss any week-based assignments or any categories.
 `;
 
   try {

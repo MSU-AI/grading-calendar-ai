@@ -114,37 +114,42 @@ exports.processDocuments = functions.https.onCall(async (data, context) => {
   }
 });
 
-exports.formatDocumentsData = functions.https.onCall(async (data, context) => {
-  try {
-    // Ensure user is authenticated
-    if (!context.auth) {
-      throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+exports.formatDocumentsData = functions
+  .runWith({
+    timeoutSeconds: 300, // Increase to 5 minutes (300 seconds)
+    memory: '1GB'        // Increase memory to 1GB
+  })
+  .https.onCall(async (data, context) => {
+    try {
+      // Ensure user is authenticated
+      if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'User must be authenticated');
+      }
+      
+      const userId = context.auth.uid;
+      const forceProcess = data?.forceProcess === true;
+      
+      console.log(`Manual formatting requested for user ${userId}, forceProcess: ${forceProcess}`);
+      
+      // Call the formatDocumentsData function with the forceProcess flag
+      const formattedData = await formatDocumentsData(userId, forceProcess);
+      
+      if (!formattedData) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'No documents available for formatting or formatting failed'
+        );
+      }
+      
+      return {
+        success: true,
+        message: 'Documents formatted successfully'
+      };
+    } catch (error) {
+      console.error('Error in formatDocumentsData:', error);
+      throw new functions.https.HttpsError('internal', error.message);
     }
-    
-    const userId = context.auth.uid;
-    const forceProcess = data?.forceProcess === true;
-    
-    console.log(`Manual formatting requested for user ${userId}, forceProcess: ${forceProcess}`);
-    
-    // Call the formatDocumentsData function with the forceProcess flag
-    const formattedData = await formatDocumentsData(userId, forceProcess);
-    
-    if (!formattedData) {
-      throw new functions.https.HttpsError(
-        'failed-precondition',
-        'No documents available for formatting or formatting failed'
-      );
-    }
-    
-    return {
-      success: true,
-      message: 'Documents formatted successfully'
-    };
-  } catch (error) {
-    console.error('Error in formatDocumentsData:', error);
-    throw new functions.https.HttpsError('internal', error.message);
-  }
-});
+  });
 
 /**
  * Handles the upload of PDF documents to Firebase Storage and creates corresponding Firestore records.

@@ -70,7 +70,7 @@ async function callOpenAIForFormatting(prompt) {
   try {
     // Call OpenAI with strict instruction for JSON
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       messages: [
         { 
           role: "system", 
