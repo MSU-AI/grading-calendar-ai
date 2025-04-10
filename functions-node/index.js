@@ -1,4 +1,4 @@
-const functions = require('firebase-functions');
+const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 const pdfParse = require('pdf-parse');
 const tmp = require('tmp');
@@ -20,18 +20,11 @@ admin.initializeApp();
 // exports.predictFinalGrade = predictFinalGrade;
 
 /**
- * Cloud Function to calculate current grade based on submitted assignments
+ * Cloud Functions to calculate grades and predict final grades
+ * Directly exported to avoid wrapping issues
  */
-exports.calculateCurrentGrade = functions.https.onCall(async (data, context) => {
-  return calculateGradeFunctions.calculateCurrentGrade(data, context);
-});
-
-/**
- * Cloud Function to predict final grade using AI
- */
-exports.predictFinalGrade = functions.https.onCall(async (data, context) => {
-  return predictGradeFunctions.predictFinalGrade(data, context);
-});
+exports.calculateCurrentGrade = calculateGradeFunctions.calculateCurrentGrade;
+exports.predictFinalGrade = predictGradeFunctions.predictFinalGrade;
 
 /**
  * Cloud Function to trigger processing of documents
