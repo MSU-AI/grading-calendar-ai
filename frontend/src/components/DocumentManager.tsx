@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import DocumentProcessingStatus from './DocumentProcessingStatus';
@@ -25,6 +25,7 @@ const DocumentManager: React.FC = () => {
   const [documentType, setDocumentType] = useState<DocumentType>(DOCUMENT_TYPES.SYLLABUS);
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [fadeIn, setFadeIn] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null); // Reference for file input
   
   const functions = getFunctions();
 
@@ -136,6 +137,13 @@ const DocumentManager: React.FC = () => {
     
     if (e.dataTransfer.files) {
       setFiles(Array.from(e.dataTransfer.files));
+    }
+  };
+  
+  // Function to handle browse click
+  const handleBrowseClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -296,6 +304,7 @@ const DocumentManager: React.FC = () => {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
+                  onClick={handleBrowseClick} // Add click handler to the entire area
                 >
                   <div 
                     style={{ 
@@ -318,6 +327,7 @@ const DocumentManager: React.FC = () => {
                   <p style={styles.dropText}>Drag & drop files here or <span style={styles.browseText}>browse</span></p>
                   <input
                     id="fileInput"
+                    ref={fileInputRef} // Add ref to connect with handleBrowseClick
                     type="file"
                     accept="application/pdf"
                     multiple
