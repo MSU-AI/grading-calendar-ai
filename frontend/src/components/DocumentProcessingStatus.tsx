@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getFirestore, collection, query, onSnapshot, doc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import DOCUMENT_TYPES, { DocumentType } from '../constants/documentTypes';
-import { Alert, Button, ProgressBar, StatusBadge, Card, SectionTitle } from './common/index';
+import { Alert, Button, ProgressBar, StatusBadge } from './common/index';
 import FrostedGlass from './common/FrostedGlass';
 
 interface Document {
@@ -28,9 +28,60 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
   const [processingComplete, setProcessingComplete] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
+  const [fadeIn, setFadeIn] = useState<boolean>(false);
   
   const db = getFirestore();
   const functions = getFunctions();
+
+  useEffect(() => {
+    // Add animation effects
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = `
+      .process-fade-in {
+        animation: processFadeIn 0.6s ease-out forwards;
+      }
+      
+      @keyframes processFadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      .document-type-item {
+        transition: all 0.3s ease;
+      }
+      
+      .document-type-item:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+      }
+      
+      .footer-card-hover {
+        transition: all 0.3s ease;
+      }
+      
+      .footer-card-hover:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 25px rgba(0, 0, 0, 0.15);
+        background-color: rgba(97, 87, 255, 0.15);
+      }
+    `;
+    document.head.appendChild(styleTag);
+    
+    // Trigger fade-in animation
+    setTimeout(() => {
+      setFadeIn(true);
+    }, 200);
+
+    return () => {
+      document.head.removeChild(styleTag);
+    };
+  }, []);
 
   // Listen for document status changes
   useEffect(() => {
@@ -221,8 +272,21 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
   const canFormat = documentCounts.extracted > 0 && !isFormatting;
 
   return (
-    <Card variant="light" style={styles.container}>
-      <SectionTitle>Document Processing Status</SectionTitle>
+    <FrostedGlass 
+      variant="dark" 
+      opacity={0.15} 
+      blur={12}
+      background="rgba(19, 10, 57, 0.4)"
+      style={{
+        ...styles.container,
+        opacity: fadeIn ? 1 : 0,
+        transform: fadeIn ? 'translateY(0)' : 'translateY(10px)'
+      }}
+      elevation="medium"
+      border="rgba(174, 185, 225, 0.2)"
+      className={fadeIn ? 'process-fade-in' : ''}
+    >
+      <h3 style={styles.sectionTitle}>Document Processing Status</h3>
       
       {error && <Alert type="error">{error}</Alert>}
       {status && <Alert type="info">{status}</Alert>}
@@ -232,7 +296,14 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
       </div>
       
       <div style={styles.statusSummaryContainer}>
-        <FrostedGlass style={styles.statusSummary} variant="standard">
+        <FrostedGlass 
+          variant="light" 
+          opacity={0.15} 
+          blur={8}
+          style={styles.statusSummary}
+          className="footer-card-hover"
+          border="rgba(174, 185, 225, 0.2)"
+        >
           <div style={styles.statusItem}>
             <span style={styles.statusLabel}>Uploaded</span>
             <span style={styles.statusCount}>{documentCounts.uploaded}</span>
@@ -246,7 +317,10 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
             <span style={styles.statusCount}>{documentCounts.processed}</span>
           </div>
           <div style={styles.statusItem}>
-            <span style={styles.statusLabel}>Errors</span>
+            <span style={{
+              ...styles.statusLabel,
+              color: documentCounts.error > 0 ? theme.colors.error : 'inherit'
+            }}>Errors</span>
             <span style={{
               ...styles.statusCount,
               color: documentCounts.error > 0 ? theme.colors.error : 'inherit'
@@ -258,16 +332,37 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
       <div style={styles.documentTypeInfo}>
         <h3 style={styles.sectionSubtitle}>Document Types</h3>
         <div style={styles.documentTypeList}>
-          <FrostedGlass style={styles.documentTypeItem} hover={true}>
+          <FrostedGlass 
+            variant="light" 
+            opacity={0.15} 
+            blur={8}
+            style={styles.documentTypeItem}
+            className="footer-card-hover"
+            border="rgba(174, 185, 225, 0.2)"
+          >
             <span style={styles.documentTypeLabel}>Syllabus</span>
             <span style={styles.documentTypeCount}>{documentTypeCount.syllabus}</span>
             {!hasSyllabus && <span style={styles.documentTypeWarning}>Recommended</span>}
           </FrostedGlass>
-          <FrostedGlass style={styles.documentTypeItem} hover={true}>
+          <FrostedGlass 
+            variant="accent" 
+            opacity={0.15} 
+            blur={8}
+            style={styles.documentTypeItem}
+            className="footer-card-hover"
+            border="rgba(97, 87, 255, 0.3)"
+          >
             <span style={styles.documentTypeLabel}>Transcript</span>
             <span style={styles.documentTypeCount}>{documentTypeCount.transcript}</span>
           </FrostedGlass>
-          <FrostedGlass style={styles.documentTypeItem} hover={true}>
+          <FrostedGlass 
+            variant="accent" 
+            opacity={0.15} 
+            blur={8}
+            style={styles.documentTypeItem}
+            className="footer-card-hover"
+            border="rgba(97, 87, 255, 0.3)"
+          >
             <span style={styles.documentTypeLabel}>Grades</span>
             <span style={styles.documentTypeCount}>{documentTypeCount.grades}</span>
           </FrostedGlass>
@@ -305,7 +400,7 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
       {documents.length > 0 && (
         <div style={styles.documentsList}>
           <h3 style={styles.sectionSubtitle}>Document Details</h3>
-          <FrostedGlass style={styles.tableWrapper} variant="light">
+          
             <table style={styles.table}>
               <thead>
                 <tr>
@@ -317,10 +412,19 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
               </thead>
               <tbody>
                 {documents.map((doc) => (
-                  <tr key={doc.id} style={styles.tableRow}>
+                  <tr key={doc.id} style={styles.tableRow} className="document-row">
                     <td style={styles.tableCell}>{doc.name || 'Unnamed document'}</td>
                     <td style={styles.tableCell}>
-                      <span style={styles.documentTypeBadge}>{doc.documentType}</span>
+                      <FrostedGlass 
+                        variant="accent"
+                        opacity={0.15}
+                        blur={8}
+                        style={styles.documentTypeBadge}
+                        className="footer-card-hover"
+                        border="rgba(97, 87, 255, 0.3)"
+                      >
+                        {doc.documentType}
+                      </FrostedGlass>
                     </td>
                     <td style={styles.tableCell}>
                       <StatusBadge status={doc.status}/>
@@ -356,23 +460,36 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
                 ))}
               </tbody>
             </table>
-          </FrostedGlass>
         </div>
       )}
-    </Card>
+    </FrostedGlass>
   );
 };
 
 const styles = {
   container: {
-    padding: '20px',
+    padding: '25px',
     marginBottom: '20px',
+    borderRadius: '12px',
+    transition: 'opacity 0.6s ease, transform 0.6s ease',
+  },
+  sectionTitle: {
+    color: '#f0f0f0',
+    fontSize: '20px',
+    margin: '0 0 20px 0',
+    fontWeight: 600,
+    background: 'linear-gradient(90deg, #FFFFFF, #AEB9E1)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
   },
   sectionSubtitle: {
-    color: '#1F0F5C',
+    color: '#f0f0f0',
     fontSize: '18px',
     marginBottom: '15px',
     fontWeight: 600,
+    background: 'linear-gradient(90deg, #FFFFFF, #AEB9E1)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
   },
   progressContainer: {
     marginTop: '20px',
@@ -385,7 +502,8 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     flexWrap: 'wrap' as const,
-    padding: '15px',
+    padding: '20px',
+    borderRadius: '12px',
   },
   statusItem: {
     flex: '1 1 0',
@@ -395,14 +513,14 @@ const styles = {
   statusLabel: {
     display: 'block',
     fontSize: '14px',
-    color: '#666',
+    color: '#AEB9E1',
     marginBottom: '5px',
   },
   statusCount: {
     display: 'block',
     fontSize: '24px',
     fontWeight: 'bold' as const,
-    color: '#333',
+    color: '#f0f0f0',
   },
   documentTypeInfo: {
     marginBottom: '20px',
@@ -420,15 +538,16 @@ const styles = {
     flexDirection: 'column' as const,
     alignItems: 'center',
     minWidth: '120px',
+    borderRadius: '12px',
   },
   documentTypeLabel: {
     fontSize: '14px',
-    color: '#666',
+    color: '#AEB9E1',
   },
   documentTypeCount: {
     fontSize: '24px',
     fontWeight: 'bold' as const,
-    color: '#333',
+    color: '#f0f0f0',
     margin: '5px 0',
   },
   documentTypeWarning: {
@@ -449,7 +568,7 @@ const styles = {
   },
   tableWrapper: {
     overflowX: 'auto' as const,
-    borderRadius: '8px',
+    borderRadius: '12px',
   },
   table: {
     width: '100%',
@@ -459,24 +578,23 @@ const styles = {
   tableHeader: {
     textAlign: 'left' as const,
     padding: '12px 15px',
-    backgroundColor: 'rgba(97, 87, 255, 0.1)',
-    color: '#333',
+    color: '#AEB9E1',
     fontWeight: 600,
-    borderBottom: '1px solid rgba(97, 87, 255, 0.2)',
+    borderBottom: '1px solid rgba(174, 185, 225, 0.2)',
   },
   tableRow: {
-    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+    borderBottom: '1px solid rgba(174, 185, 225, 0.1)',
     transition: 'background-color 0.2s',
   },
   tableCell: {
     padding: '12px 15px',
     verticalAlign: 'middle' as const,
+    color: '#f0f0f0',
   },
   documentTypeBadge: {
     display: 'inline-block',
     padding: '5px 10px',
-    backgroundColor: 'rgba(97, 87, 255, 0.1)',
-    color: '#6157FF',
+    color: '#ffffff',
     borderRadius: '4px',
     fontSize: '0.9em',
     fontWeight: 500,

@@ -4,6 +4,7 @@ import PredictionPanel from './PredictionPanel';
 import { useAuth } from '../contexts/AuthContext';
 import { globalStyles, initializeGlobalStyles, particleConfig } from './GlobalStyles';
 import FrostedGlass from './common/FrostedGlass';
+import ParticleBackground from './common/ParticleBackground';
 
 // TypeScript type declaration for particlesJS
 declare global {
@@ -30,16 +31,47 @@ const Dashboard: React.FC = () => {
     // Initialize global styles
     const cleanupStyles = initializeGlobalStyles();
     
-    // Dynamically load particles.js script
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js';
-    script.async = true;
-    script.onload = () => {
-      // Initialize particles.js after script is loaded
-      window.particlesJS('dashboard-particles', particleConfig);
-    };
-    document.body.appendChild(script);
-
+    // Add custom animations for dashboard
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = `
+      @keyframes floatGlow {
+        0% { box-shadow: 0 0 15px rgba(97, 87, 255, 0.3); transform: translateY(0px); }
+        50% { box-shadow: 0 0 25px rgba(97, 87, 255, 0.5); transform: translateY(-10px); }
+        100% { box-shadow: 0 0 15px rgba(97, 87, 255, 0.3); transform: translateY(0px); }
+      }
+      
+      .tab-hover:hover {
+        background-color: rgba(97, 87, 255, 0.2) !important;
+        transform: translateY(-2px);
+        transition: all 0.3s ease;
+      }
+      
+      .footer-card-hover {
+        transition: all 0.3s ease;
+      }
+      
+      .footer-card-hover:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 12px 25px rgba(0, 0, 0, 0.15);
+        background-color: rgba(97, 87, 255, 0.15);
+      }
+      
+      .glow-text {
+        text-shadow: 0 0 8px rgba(97, 87, 255, 0.6);
+      }
+      
+      .dashboard-fade-in {
+        opacity: 0;
+        transform: translateY(20px);
+        animation: fadeIn 0.6s ease-out forwards;
+      }
+      
+      .pulse-animation {
+        animation: pulse 2s infinite ease-in-out;
+      }
+    `;
+    document.head.appendChild(styleTag);
+    
     // Set fade in effect after a short delay
     setTimeout(() => {
       setFadeIn(true);
@@ -48,8 +80,7 @@ const Dashboard: React.FC = () => {
     // Cleanup
     return () => {
       cleanupStyles();
-      const scriptElement = document.querySelector('script[src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"]');
-      if (scriptElement) document.body.removeChild(scriptElement);
+      document.head.removeChild(styleTag);
     };
   }, []);
 
@@ -62,18 +93,74 @@ const Dashboard: React.FC = () => {
 
   return (
     <>
-      <div id="dashboard-particles"></div>
+      <ParticleBackground 
+        id="dashboard-particles" 
+        config={{
+          particles: {
+            number: {
+              value: 80,
+              density: { enable: true, value_area: 800 }
+            },
+            color: {
+              value: ["#AEB9E1", "#9A8BD0", "#7063A7", "#6157FF"]
+            },
+            opacity: {
+              value: 0.6,
+              random: true,
+              anim: { enable: true, speed: 1, opacity_min: 0.1, sync: false }
+            },
+            size: {
+              value: 4,
+              random: true
+            },
+            line_linked: {
+              enable: true,
+              distance: 150,
+              color: "#AEB9E1",
+              opacity: 0.4,
+              width: 1
+            },
+            move: {
+              enable: true,
+              speed: 4,
+              direction: "none",
+              random: false,
+              straight: false,
+              out_mode: "out",
+              bounce: false
+            }
+          },
+          interactivity: {
+            detect_on: "canvas",
+            events: {
+              onhover: {
+                enable: true,
+                mode: "repulse"
+              },
+              onclick: {
+                enable: true,
+                mode: "push"
+              },
+              resize: true
+            }
+          }
+        }}
+      />
       
-      <div style={{
-        ...styles.container,
-        opacity: fadeIn ? 1 : 0,
-        transform: fadeIn ? 'translateY(0)' : 'translateY(20px)'
-      }}>
+      <div 
+        style={{
+          ...styles.container,
+          opacity: fadeIn ? 1 : 0,
+          transform: fadeIn ? 'translateY(0)' : 'translateY(20px)'
+        }}
+        className="dashboard-fade-in"
+      >
         <FrostedGlass 
-          opacity={0.6} 
+          opacity={0.2} 
           blur={15}
-          background="rgba(30, 19, 80, 0.5)"
+          background="rgba(30, 19, 80, 0.7)"
           style={styles.header}
+          elevation="high"
         >
           <div style={styles.headerContent}>
             <h1 style={styles.title}>
@@ -81,7 +168,6 @@ const Dashboard: React.FC = () => {
             </h1>
             <p style={styles.subtitle}>Track your academic progress and predict your final grades</p>
           </div>
-          <div style={styles.headerGlow}></div>
         </FrostedGlass>
         
         {/* Quick Tip Component */}
@@ -90,6 +176,8 @@ const Dashboard: React.FC = () => {
           blur={8}
           background="rgba(97, 87, 255, 0.1)"
           style={styles.quickTip}
+          elevation="low"
+          border="rgba(97, 87, 255, 0.3)"
         >
           <div style={styles.tipIcon}>💡</div>
           <div style={styles.tipContent}>
@@ -101,6 +189,7 @@ const Dashboard: React.FC = () => {
           <button 
             style={activeTab === 'documents' ? styles.activeTab : styles.tab}
             onClick={() => setActiveTab('documents')}
+            className={activeTab !== 'documents' ? 'tab-hover' : ''}
           >
             <span style={styles.tabIcon}>📄</span>
             Document Manager
@@ -108,6 +197,7 @@ const Dashboard: React.FC = () => {
           <button 
             style={activeTab === 'prediction' ? styles.activeTab : styles.tab}
             onClick={() => setActiveTab('prediction')}
+            className={activeTab !== 'prediction' ? 'tab-hover' : ''}
           >
             <span style={styles.tabIcon}>📊</span>
             Grade Prediction
@@ -115,9 +205,9 @@ const Dashboard: React.FC = () => {
         </div>
         
         <FrostedGlass
-          opacity={0.9}
+          opacity={0.05}
           blur={20}
-          background="rgba(255, 255, 255, 0.05)"
+          background="rgba(19, 10, 57, 0.2)"
           radius={0}
           borderWidth={0}
           style={styles.content}
@@ -127,19 +217,22 @@ const Dashboard: React.FC = () => {
         </FrostedGlass>
         
         <FrostedGlass
-          opacity={0.7}
-          blur={10}
-          background="rgba(245, 247, 255, 0.1)"
+          opacity={0.15}
+          blur={12}
+          background="rgba(19, 10, 57, 0.4)"
           style={styles.footer}
+          elevation="medium"
+          border="rgba(174, 185, 225, 0.2)"
         >
           <div style={styles.footerContent}>
             <div style={styles.footerSection}>
               <h3 style={styles.footerTitle}>How It Works</h3>
               <FrostedGlass
-                opacity={0.4}
+                opacity={0.15}
                 blur={5}
-                className="card-hover"
+                className="footer-card-hover"
                 style={styles.footerCard}
+                variant="accent"
               >
                 <ol style={styles.footerList}>
                   <li>Upload your syllabus and grade documents</li>
@@ -151,10 +244,11 @@ const Dashboard: React.FC = () => {
             <div style={styles.footerSection}>
               <h3 style={styles.footerTitle}>Tips</h3>
               <FrostedGlass
-                opacity={0.4}
+                opacity={0.15}
                 blur={5}
-                className="card-hover"
+                className="footer-card-hover"
                 style={styles.footerCard}
+                variant="accent"
               >
                 <ul style={styles.footerList}>
                   <li>Upload a syllabus for the most accurate predictions</li>
@@ -190,6 +284,8 @@ const styles = {
     padding: '25px',
     position: 'relative' as const,
     overflow: 'hidden',
+    borderRadius: '12px',
+    border: '1px solid rgba(174, 185, 225, 0.2)',
   },
   headerContent: {
     position: 'relative' as const,
@@ -205,13 +301,21 @@ const styles = {
     background: 'radial-gradient(circle, rgba(97, 87, 255, 0.4) 0%, rgba(97, 87, 255, 0) 70%)',
     zIndex: 1,
     pointerEvents: 'none' as const,
-    animation: 'float 6s ease-in-out infinite',
+    animation: 'floatGlow 6s ease-in-out infinite',
   },
   title: {
-    ...globalStyles.text.title,
+    fontSize: '32px',
+    fontWeight: 700,
+    background: 'linear-gradient(90deg, #FFFFFF, #AEB9E1)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    textShadow: '0 2px 10px rgba(97, 87, 255, 0.2)',
+    margin: 0,
   },
   subtitle: {
-    ...globalStyles.text.subtitle,
+    margin: '10px 0 0 0',
+    color: '#AEB9E1',
+    fontSize: '18px',
   },
   quickTip: {
     display: 'flex',
@@ -219,6 +323,8 @@ const styles = {
     gap: '15px',
     marginBottom: '20px',
     animation: 'fadeIn 0.5s ease-out',
+    padding: '15px 20px',
+    borderRadius: '8px',
   },
   tipIcon: {
     fontSize: '24px',
@@ -235,11 +341,10 @@ const styles = {
   tabs: {
     display: 'flex',
     marginBottom: '0',
-    borderRadius: '12px 12px 0 0',
+    borderRadius: '8px 8px 0 0',
     overflow: 'hidden',
-    backdropFilter: 'blur(5px)',
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(19, 10, 57, 0.3)',
+    border: '1px solid rgba(174, 185, 225, 0.2)',
     borderBottom: 'none',
   },
   tab: {
@@ -286,11 +391,16 @@ const styles = {
     marginBottom: '30px',
     overflow: 'hidden',
     animation: 'fadeIn 0.5s ease-out',
+    borderBottomLeftRadius: '8px',
+    borderBottomRightRadius: '8px',
+    border: '1px solid rgba(174, 185, 225, 0.1)',
+    borderTop: 'none',
   },
   footer: {
     padding: '25px',
     color: '#f0f0f0',
     marginTop: 'auto',
+    borderRadius: '8px',
   },
   footerContent: {
     display: 'flex',
@@ -304,12 +414,17 @@ const styles = {
   footerCard: {
     padding: '15px',
     transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+    borderRadius: '8px',
+    border: '1px solid rgba(174, 185, 225, 0.2)',
   },
   footerTitle: {
     fontSize: '18px',
     color: '#f0f0f0',
     marginBottom: '15px',
     fontWeight: 600,
+    background: 'linear-gradient(90deg, #FFFFFF, #AEB9E1)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
   },
   footerList: {
     paddingLeft: '20px',
