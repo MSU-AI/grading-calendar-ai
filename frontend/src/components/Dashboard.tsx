@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import DocumentManager from './DocumentManager';
 import PredictionPanel from './PredictionPanel';
 import { useAuth } from '../contexts/AuthContext';
-import { globalStyles, initializeGlobalStyles, particleConfig } from './GlobalStyles';
+import { initializeGlobalStyles } from './GlobalStyles';
 import FrostedGlass from './common/FrostedGlass';
 import ParticleBackground from './common/ParticleBackground';
 
