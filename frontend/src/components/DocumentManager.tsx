@@ -140,13 +140,6 @@ const DocumentManager: React.FC = () => {
     }
   };
   
-  // Function to handle browse click
-  const handleBrowseClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -299,12 +292,19 @@ const DocumentManager: React.FC = () => {
                 <div 
                   style={{
                     ...isDragging ? styles.fileInputWrapperActive : styles.fileInputWrapper,
+                    position: 'relative', // Ensure positioning context
                     overflow: 'hidden'
                   }}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  onClick={handleBrowseClick} // Add click handler to the entire area
+                  onClick={() => {
+                    // Explicitly trigger click on the file input
+                    const fileInput = document.getElementById('fileInput');
+                    if (fileInput) {
+                      fileInput.click();
+                    }
+                  }}
                 >
                   <div 
                     style={{ 
@@ -327,12 +327,22 @@ const DocumentManager: React.FC = () => {
                   <p style={styles.dropText}>Drag & drop files here or <span style={styles.browseText}>browse</span></p>
                   <input
                     id="fileInput"
-                    ref={fileInputRef} // Add ref to connect with handleBrowseClick
+                    ref={fileInputRef}
                     type="file"
                     accept="application/pdf"
                     multiple
                     onChange={handleFileChange}
-                    style={styles.fileInput}
+                    style={{
+                      ...styles.fileInput,
+                      // Make sure it's absolutely positioned but still accessible
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      opacity: 0,
+                      width: '1px',
+                      height: '1px',
+                      overflow: 'hidden'
+                    }}
                     disabled={isUploading}
                   />
                   <div style={styles.selectedFiles}>
@@ -589,8 +599,6 @@ const styles = {
   },
   fileInput: {
     marginBottom: '10px',
-    width: '0.1px',
-    height: '0.1px',
     opacity: 0,
     overflow: 'hidden',
     position: 'absolute' as const,
