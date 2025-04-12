@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { useTheme } from '../contexts/ThemeContext';
 import ParticleBackground from './common/ParticleBackground';
 import FrostedGlass from './common/FrostedGlass';
 import { Input, Button, Alert } from './common/index';
@@ -13,7 +12,6 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [fadeIn, setFadeIn] = useState(false);
   const { signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
-  const { theme } = useTheme();
   const navigate = useNavigate();
 
   useEffect(() => {

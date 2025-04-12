@@ -17,12 +17,12 @@ const Dashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('documents');
   const { currentUser } = useAuth();
   const [fadeIn, setFadeIn] = useState<boolean>(false);
-  const [quickTips, setQuickTips] = useState<string[]>([
+  const quickTips = [
     "Upload syllabi to get the most accurate grade predictions",
     "The AI analyzes your grade distribution patterns",
     "Check predictions before major assignments to plan your study time",
     "Upload transcript files to include your past course performance"
-  ]);
+  ];
   
   // Randomly selects a tip to show
   const randomTip = quickTips[Math.floor(Math.random() * quickTips.length)];
