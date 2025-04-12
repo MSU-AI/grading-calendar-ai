@@ -11,6 +11,7 @@ interface Document {
   documentType: DocumentType;
   status: string;
   uploadedAt: any;
+  lastExtracted?: any;
   filePath: string;
   name: string;
 }
@@ -454,7 +455,11 @@ const DocumentManager: React.FC = () => {
                           </span>
                         </td>
                         <td style={styles.tableCell}>
-                          {doc.uploadedAt ? new Date(doc.uploadedAt.seconds * 1000).toLocaleString() : 'Unknown date'}
+                          {(doc.uploadedAt && (doc.uploadedAt.seconds || doc.uploadedAt._seconds)) ? 
+                            new Date((doc.uploadedAt.seconds || doc.uploadedAt._seconds) * 1000).toLocaleString() : 
+                            (doc.lastExtracted && (doc.lastExtracted.seconds || doc.lastExtracted._seconds)) ?
+                            new Date((doc.lastExtracted.seconds || doc.lastExtracted._seconds) * 1000).toLocaleString() :
+                            'Unknown date'}
                         </td>
                         <td style={styles.tableCell}>
                           <Button

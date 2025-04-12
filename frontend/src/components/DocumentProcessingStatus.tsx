@@ -376,7 +376,7 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
       </div>
       
       <div style={styles.actionsContainer}>
-        {documents.length > 0 && documentCounts.extracted > 0 && (
+        {false && documents.length > 0 && documentCounts.extracted > 0 && (
           <Button 
             onClick={handleProcessDocuments} 
             disabled={isProcessing}
