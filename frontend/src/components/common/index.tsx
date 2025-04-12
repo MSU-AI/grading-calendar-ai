@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTheme } from '../../contexts/ThemeContext';
 
-// Button component
+// Button component definition
 interface ButtonProps {
   children: React.ReactNode;
   onClick?: () => void;
