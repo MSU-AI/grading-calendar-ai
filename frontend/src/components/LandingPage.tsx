@@ -232,7 +232,7 @@ const GradingAILanding = () => {
               background: 'linear-gradient(90deg, #FFFFFF, #AEB9E1)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent'
-            }}>Grading AI</h2>
+            }}>GradeScape</h2>
           </div>
           
           {/* Buttons Right */}

@@ -2,13 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { getFirestore, collection, query, orderBy, limit, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { calculateCurrentGrade, predictFinalGrade } from '../services/gradeService';
-import DocumentProcessingStatus from './DocumentProcessingStatus';
-
-interface Document {
-  id: string;
-  documentType: string;
-  status: string;
-}
 
 interface Prediction {
   grade: number | string;
@@ -35,14 +28,12 @@ const PredictionPanel: React.FC = () => {
   const { currentUser } = useAuth();
   const [isPredicting, setIsPredicting] = useState<boolean>(false);
   const [predictionResult, setPredictionResult] = useState<Prediction | null>(null);
-  const [documents] = useState<Document[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
-  const [processingComplete, setProcessingComplete] = useState<boolean>(false);
   
   const db = getFirestore();
 
-  // Listen for documents and predictions
+  // Listen for predictions
   useEffect(() => {
     if (!currentUser) return;
 
@@ -125,90 +116,107 @@ const PredictionPanel: React.FC = () => {
     }
   };
 
-  // Determine if we can make a prediction based on document status or processing completion
-  const canPredict = documents.some(doc => doc.status === 'processed') || processingComplete;
-  
-
   return (
     <div style={styles.container}>
-      <h2 style={styles.title}>Grade Prediction</h2>
+      <div style={styles.header}>
+        <h2 style={styles.title}>Grade Prediction</h2>
+        <p style={styles.subtitle}>Get insights into your final grade based on current performance</p>
+      </div>
       
-      <DocumentProcessingStatus onProcessingComplete={() => setProcessingComplete(true)} />
-      
-      {error && <p style={styles.error}>{error}</p>}
-      {status && <p style={styles.status}>{status}</p>}
+      {error && <div style={styles.error}>{error}</div>}
+      {status && <div style={styles.status}>{status}</div>}
 
       <div style={styles.predictSection}>
         <button 
           onClick={handlePredict} 
-          disabled={isPredicting || !canPredict}
-          style={canPredict ? styles.predictButton : styles.predictButtonDisabled}
+          disabled={isPredicting}
+          style={isPredicting ? styles.predictButtonDisabled : styles.predictButton}
         >
-          {isPredicting ? 'Generating Prediction...' : 'Predict Grade'}
+          {isPredicting ? (
+            <>
+              <span style={styles.spinner}></span>
+              Generating Prediction...
+            </>
+          ) : 'Predict My Grade'}
         </button>
+        <p style={styles.predictInfo}>
+          Our AI will analyze your uploaded documents and provide a personalized grade prediction
+        </p>
       </div>
 
       {predictionResult && predictionResult.categorized_grades && (
         <div style={styles.predictionResult}>
-          <h3>Prediction Result</h3>
-          <div style={styles.gradeDisplay}>
-            <div style={styles.gradeCircle}>
-              {predictionResult.letter_grade || 'N/A'}
-            </div>
-            <div style={styles.gradePercentage}>
-              {typeof predictionResult.current_percentage === 'number' 
-                ? `${predictionResult.current_percentage.toFixed(1)}%`
-                : 'N/A'}
-            </div>
-            <div style={styles.gradeLabel}>Current Grade</div>
+          <div style={styles.resultHeader}>
+            <h3 style={styles.resultTitle}>Your Grade Prediction</h3>
           </div>
           
-          <div style={styles.gradeRangeSection}>
-            <h4>Grade Range</h4>
-            <div style={styles.gradeRange}>
-              <div style={styles.rangeItem}>
-                <span style={styles.rangeLabel}>Minimum:</span>
-                <span style={styles.rangeValue}>
-                  {typeof predictionResult.min_possible_grade === 'number' 
-                    ? `${predictionResult.min_possible_grade.toFixed(1)}%` 
-                    : 'N/A'}
-                </span>
+          <div style={styles.gradeDisplayWrapper}>
+            <div style={styles.gradeDisplay}>
+              <div style={styles.gradeCircle}>
+                {predictionResult.letter_grade || 'N/A'}
               </div>
-              <div style={styles.rangeItem}>
-                <span style={styles.rangeLabel}>Maximum:</span>
-                <span style={styles.rangeValue}>
-                  {typeof predictionResult.max_possible_grade === 'number' 
-                    ? `${predictionResult.max_possible_grade.toFixed(1)}%` 
+              <div>
+                <div style={styles.gradePercentage}>
+                  {typeof predictionResult.current_percentage === 'number' 
+                    ? `${predictionResult.current_percentage.toFixed(1)}%`
                     : 'N/A'}
-                </span>
+                </div>
+                <div style={styles.gradeLabel}>Current Grade</div>
+              </div>
+            </div>
+            
+            <div style={styles.gradeRangeSection}>
+              <h4 style={styles.rangeTitle}>Possible Range</h4>
+              <div style={styles.gradeRange}>
+                <div style={styles.rangeItem}>
+                  <span style={styles.rangeLabel}>Minimum</span>
+                  <span style={styles.rangeValue}>
+                    {typeof predictionResult.min_possible_grade === 'number' 
+                      ? `${predictionResult.min_possible_grade.toFixed(1)}%` 
+                      : 'N/A'}
+                  </span>
+                </div>
+                <div style={styles.rangeMiddle}>to</div>
+                <div style={styles.rangeItem}>
+                  <span style={styles.rangeLabel}>Maximum</span>
+                  <span style={styles.rangeValue}>
+                    {typeof predictionResult.max_possible_grade === 'number' 
+                      ? `${predictionResult.max_possible_grade.toFixed(1)}%` 
+                      : 'N/A'}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
           
           <div style={styles.reasoningSection}>
-            <h4>Analysis</h4>
+            <h4 style={styles.sectionTitle}>Analysis</h4>
             <p style={styles.reasoning}>{predictionResult.reasoning || 'No analysis available'}</p>
-            {predictionResult.ai_prediction && (
-              <div style={styles.aiPrediction}>
-                <h4>AI Prediction</h4>
-                <p><strong>Predicted Grade: {predictionResult.ai_prediction.grade} ({predictionResult.ai_prediction.numerical_grade.toFixed(1)}%)</strong></p>
-                <p>{predictionResult.ai_prediction.reasoning || 'No AI reasoning available'}</p>
-              </div>
-            )}
           </div>
           
+          {predictionResult.ai_prediction && (
+            <div style={styles.aiPrediction}>
+              <h4 style={styles.sectionTitle}>AI Prediction</h4>
+              <p style={styles.aiGrade}>
+                Predicted Grade: <span style={styles.aiGradeValue}>{predictionResult.ai_prediction.grade} ({predictionResult.ai_prediction.numerical_grade.toFixed(1)}%)</span>
+              </p>
+              <p style={styles.aiReasoning}>{predictionResult.ai_prediction.reasoning || 'No AI reasoning available'}</p>
+            </div>
+          )}
+          
           <div style={styles.categoriesSection}>
-            <h4>Grade Breakdown by Category</h4>
+            <h4 style={styles.sectionTitle}>Grade Breakdown by Category</h4>
             {Object.entries(predictionResult.categorized_grades).map(([category, data]) => (
               <div key={category} style={styles.categoryItem}>
                 <h5 style={styles.categoryTitle}>{category}</h5>
                 {data && data.average !== null && (
                   <div style={styles.categoryStats}>
                     <span style={styles.categoryAverage}>
-                      Average: {data.average.toFixed(1)}%
+                      Average: <span style={styles.categoryValue}>{data.average.toFixed(1)}%</span>
                     </span>
                     <span style={styles.categoryProgress}>
-                      Progress: {data.completed?.length || 0} completed, {data.remaining?.length || 0} remaining
+                      <span style={styles.categoryValue}>{data.completed?.length || 0}</span> completed, 
+                      <span style={styles.categoryValue}> {data.remaining?.length || 0}</span> remaining
                     </span>
                   </div>
                 )}
@@ -220,61 +228,55 @@ const PredictionPanel: React.FC = () => {
       
       {/* Show a message if prediction failed but we're not in predicting state */}
       {!predictionResult && !isPredicting && !error && (
-        <p style={styles.noDocumentsMessage}>No prediction data available. Try generating a prediction.</p>
+        <div style={styles.emptyState}>
+          <div style={styles.emptyStateIcon}>📊</div>
+          <h3 style={styles.emptyStateTitle}>No Predictions Yet</h3>
+          <p style={styles.emptyStateText}>
+            Click the "Predict My Grade" button above to generate a personalized grade prediction
+            based on your uploaded documents.
+          </p>
+        </div>
       )}
     </div>
   );
 };
 
-const baseStyles = {
+const styles = {
   container: {
-    padding: '20px',
     backgroundColor: 'white',
     borderRadius: '8px',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    overflow: 'hidden',
   },
-  title: {
-    marginTop: 0,
-    color: '#333',
-    borderBottom: '1px solid #eee',
-    paddingBottom: '10px',
-  },
-  documentSummary: {
+  header: {
+    padding: '20px',
+    background: 'linear-gradient(135deg, #130A39 0%, #1F0F5C 50%, #341873 100%)',
+    color: 'white',
     marginBottom: '20px',
   },
-  documentStats: {
-    display: 'flex',
-    flexWrap: 'wrap' as const,
-    gap: '15px',
-    marginTop: '10px',
+  title: {
+    margin: 0,
+    color: 'white',
+    fontSize: '24px',
+    fontWeight: 700,
+    background: 'linear-gradient(90deg, #FFFFFF, #AEB9E1)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
   },
-  statItem: {
-    backgroundColor: '#f5f5f5',
-    padding: '10px 15px',
-    borderRadius: '4px',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    alignItems: 'center',
-    minWidth: '100px',
-  },
-  statLabel: {
-    fontSize: '0.9rem',
-    color: '#666',
-    marginBottom: '5px',
-  },
-  statValue: {
-    fontSize: '1.5rem',
-    fontWeight: 'bold',
-    color: '#333',
+  subtitle: {
+    margin: '10px 0 0 0',
+    color: '#AEB9E1',
+    fontSize: '16px',
   },
   predictSection: {
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
-    margin: '20px 0',
+    margin: '30px 0',
+    padding: '0 20px',
   },
   predictButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#6157FF',
     color: 'white',
     border: 'none',
     padding: '12px 30px',
@@ -282,101 +284,119 @@ const baseStyles = {
     fontSize: '18px',
     cursor: 'pointer',
     fontWeight: 'bold',
-    transition: 'background-color 0.3s',
+    transition: 'all 0.3s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    boxShadow: '0 4px 12px rgba(97, 87, 255, 0.3)',
   },
   predictButtonDisabled: {
-    backgroundColor: '#cccccc',
-    color: '#666666',
+    backgroundColor: '#9A8BD0',
+    color: 'white',
     border: 'none',
     padding: '12px 30px',
     borderRadius: '4px',
     fontSize: '18px',
     cursor: 'not-allowed',
     fontWeight: 'bold',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    opacity: 0.7,
   },
-  waitingMessage: {
-    color: '#ff9800',
-    marginTop: '10px',
-    fontStyle: 'italic',
+  spinner: {
+    display: 'inline-block',
+    width: '20px',
+    height: '20px',
+    border: '3px solid rgba(255,255,255,.3)',
+    borderRadius: '50%',
+    borderTopColor: 'white',
+    animation: 'spin 1s ease-in-out infinite',
   },
-  noDocumentsMessage: {
+  predictInfo: {
     color: '#666',
-    marginTop: '10px',
-    fontStyle: 'italic',
+    marginTop: '15px',
+    textAlign: 'center' as const,
+    maxWidth: '500px',
   },
   predictionResult: {
-    padding: '20px',
+    padding: '0 20px 20px 20px',
+    borderRadius: '8px',
+    marginTop: '10px',
+  },
+  resultHeader: {
+    marginBottom: '20px',
+  },
+  resultTitle: {
+    color: '#1F0F5C',
+    margin: '0 0 5px 0',
+    fontSize: '20px',
+  },
+  gradeDisplayWrapper: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '20px',
     backgroundColor: '#f9f9f9',
     borderRadius: '8px',
-    marginTop: '20px',
+    padding: '20px',
+    marginBottom: '20px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
   },
   gradeDisplay: {
     display: 'flex',
-    flexDirection: 'column' as const,
     alignItems: 'center',
-    marginBottom: '20px',
+    gap: '25px',
   },
   gradeCircle: {
-    width: '120px',
-    height: '120px',
-    backgroundColor: '#4CAF50',
-    borderRadius: '60px',
+    width: '100px',
+    height: '100px',
+    background: 'linear-gradient(135deg, #7063A7, #6157FF)',
+    borderRadius: '50%',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'center',
     color: 'white',
-    fontSize: '38px',
+    fontSize: '36px',
     fontWeight: 'bold',
-    marginBottom: '10px',
+    boxShadow: '0 4px 12px rgba(97, 87, 255, 0.3)',
+  },
+  gradePercentage: {
+    fontSize: '24px',
+    color: '#1F0F5C',
+    fontWeight: 'bold',
   },
   gradeLabel: {
     fontSize: '16px',
-    color: '#555',
-  },
-  reasoningSection: {
-    marginBottom: '20px',
-  },
-  reasoning: {
-    lineHeight: '1.6',
-    color: '#333',
-  },
-  error: {
-    color: '#f44336',
-    backgroundColor: '#ffebee',
-    padding: '10px',
-    borderRadius: '4px',
-    marginBottom: '15px',
-  },
-  status: {
-    color: '#2196F3',
-    backgroundColor: '#e3f2fd',
-    padding: '10px',
-    borderRadius: '4px',
-    marginBottom: '15px',
-  },
-};
-
-const styles = {
-  ...baseStyles,
-  gradePercentage: {
-    fontSize: '24px',
     color: '#666',
     marginTop: '5px',
   },
   gradeRangeSection: {
-    marginTop: '20px',
-    padding: '15px',
-    backgroundColor: '#fff',
+    backgroundColor: 'white',
     borderRadius: '8px',
+    padding: '15px',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  },
+  rangeTitle: {
+    color: '#1F0F5C',
+    margin: '0 0 10px 0',
+    fontSize: '16px',
+    fontWeight: 600,
   },
   gradeRange: {
     display: 'flex',
-    justifyContent: 'space-around',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginTop: '10px',
   },
   rangeItem: {
     textAlign: 'center' as const,
+    flex: 1,
+  },
+  rangeMiddle: {
+    color: '#666',
+    padding: '0 10px',
   },
   rangeLabel: {
     display: 'block',
@@ -386,40 +406,129 @@ const styles = {
   },
   rangeValue: {
     display: 'block',
-    color: '#333',
+    color: '#1F0F5C',
     fontSize: '20px',
     fontWeight: 'bold',
   },
+  reasoningSection: {
+    backgroundColor: '#f9f9f9',
+    padding: '20px',
+    borderRadius: '8px',
+    marginBottom: '20px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+  },
+  sectionTitle: {
+    color: '#1F0F5C',
+    margin: '0 0 15px 0',
+    fontSize: '18px',
+    fontWeight: 600,
+  },
+  reasoning: {
+    lineHeight: '1.6',
+    color: '#333',
+    margin: 0,
+  },
   aiPrediction: {
-    marginTop: '15px',
-    padding: '15px',
-    backgroundColor: '#f5f5f5',
-    borderRadius: '4px',
+    padding: '20px',
+    backgroundColor: '#F5F7FF',
+    borderRadius: '8px',
+    marginBottom: '20px',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+    border: '1px solid rgba(97, 87, 255, 0.1)',
+  },
+  aiGrade: {
+    fontWeight: 500,
+    color: '#333',
+    margin: '0 0 10px 0',
+  },
+  aiGradeValue: {
+    color: '#6157FF',
+    fontWeight: 'bold',
+  },
+  aiReasoning: {
+    lineHeight: '1.6',
+    color: '#333',
+    margin: 0,
   },
   categoriesSection: {
     marginTop: '20px',
   },
   categoryItem: {
     padding: '15px',
-    backgroundColor: '#fff',
+    backgroundColor: '#f9f9f9',
     borderRadius: '8px',
     marginBottom: '10px',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    transition: 'transform 0.3s ease, box-shadow 0.3s ease',
   },
   categoryTitle: {
     margin: '0 0 10px 0',
-    color: '#333',
+    color: '#1F0F5C',
+    fontWeight: 600,
   },
   categoryStats: {
     display: 'flex',
     justifyContent: 'space-between',
     color: '#666',
+    flexWrap: 'wrap' as const,
+    gap: '10px',
   },
   categoryAverage: {
+    fontWeight: 500,
+  },
+  categoryValue: {
+    color: '#6157FF',
     fontWeight: 'bold',
   },
   categoryProgress: {
     fontSize: '14px',
+  },
+  error: {
+    color: 'white',
+    backgroundColor: '#f44336',
+    padding: '12px 16px',
+    margin: '0 20px 15px 20px',
+    borderRadius: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontWeight: 500,
+  },
+  status: {
+    color: 'white',
+    backgroundColor: '#2196F3',
+    padding: '12px 16px',
+    margin: '0 20px 15px 20px',
+    borderRadius: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    fontWeight: 500,
+  },
+  emptyState: {
+    padding: '40px 20px',
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#666',
+    backgroundColor: '#f9f9f9',
+    borderRadius: '8px',
+    margin: '20px',
+  },
+  emptyStateIcon: {
+    fontSize: '48px',
+    marginBottom: '15px',
+  },
+  emptyStateTitle: {
+    margin: '0 0 10px 0',
+    color: '#1F0F5C',
+    fontSize: '18px',
+  },
+  emptyStateText: {
+    textAlign: 'center' as const,
+    maxWidth: '400px',
+    lineHeight: 1.5,
   }
 };
 

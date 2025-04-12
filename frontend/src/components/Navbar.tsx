@@ -18,7 +18,7 @@ const Navbar: React.FC = () => {
   return (
     <div style={styles.navbar}>
       <div style={styles.logo}>
-        Grading AI
+        GradeScape
       </div>
       {currentUser && (
         <div style={styles.userSection}>
