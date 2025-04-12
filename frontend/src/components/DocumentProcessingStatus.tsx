@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { getFirestore, collection, query, onSnapshot, doc } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import DOCUMENT_TYPES, { DocumentType } from '../constants/documentTypes';
+import { Alert, Button, ProgressBar, StatusBadge, Card, SectionTitle } from './common/index';
+import FrostedGlass from './common/FrostedGlass';
 
 interface Document {
   id: string;
@@ -12,13 +15,13 @@ interface Document {
   error?: string;
 }
 
-
 interface DocumentProcessingStatusProps {
   onProcessingComplete?: () => void;
 }
 
 const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onProcessingComplete }) => {
   const { currentUser } = useAuth();
+  const { theme } = useTheme();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [isFormatting, setIsFormatting] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -58,13 +61,6 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
       setDocuments(docs);
       
       if (docs.length > 0) {
-        // Force case-insensitive comparison for document types
-        const documentTypeCount = {
-          syllabus: docs.filter(doc => doc.documentType?.toLowerCase() === DOCUMENT_TYPES.SYLLABUS).length,
-          transcript: docs.filter(doc => doc.documentType?.toLowerCase() === DOCUMENT_TYPES.TRANSCRIPT).length,
-          grades: docs.filter(doc => doc.documentType?.toLowerCase() === DOCUMENT_TYPES.GRADES).length
-        };
-        
         // Force case-insensitive comparison for document status
         const statusCount = {
           uploaded: docs.filter(d => d.status?.toLowerCase() === 'uploaded').length,
@@ -73,22 +69,21 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
           error: docs.filter(d => d.status?.toLowerCase() === 'error').length
         };
         
-        console.log('Document counts by type:', documentTypeCount);
         console.log('Document counts by status:', statusCount);
         
-  // Check for processing completion based on any processed document
-  const hasProcessedDocuments = docs.some(doc => 
-    doc.status?.toLowerCase() === 'processed'
-  );
-  
-  console.log('Has processed documents:', hasProcessedDocuments);
-  
-  // Trigger completion if we have any processed document
-  if (hasProcessedDocuments && onProcessingComplete && !processingComplete) {
-    console.log('Processing complete condition met - has processed documents');
-    onProcessingComplete();
-    setProcessingComplete(true);
-  }
+        // Check for processing completion based on any processed document
+        const hasProcessedDocuments = docs.some(doc => 
+          doc.status?.toLowerCase() === 'processed'
+        );
+        
+        console.log('Has processed documents:', hasProcessedDocuments);
+        
+        // Trigger completion if we have any processed document
+        if (hasProcessedDocuments && onProcessingComplete && !processingComplete) {
+          console.log('Processing complete condition met - has processed documents');
+          onProcessingComplete();
+          setProcessingComplete(true);
+        }
       }
     }, (error) => {
       console.error('Error in document snapshot listener:', error);
@@ -222,209 +217,180 @@ const DocumentProcessingStatus: React.FC<DocumentProcessingStatusProps> = ({ onP
     return progress;
   };
 
-
   const progress = calculateProgress();
   const canFormat = documentCounts.extracted > 0 && !isFormatting;
 
   return (
-    <div style={styles.container}>
-      <h2 style={styles.title}>Document Processing Status</h2>
+    <Card variant="light" style={styles.container}>
+      <SectionTitle>Document Processing Status</SectionTitle>
       
-      {error && <p style={styles.error}>{error}</p>}
-      {status && <p style={styles.status}>{status}</p>}
+      {error && <Alert type="error">{error}</Alert>}
+      {status && <Alert type="info">{status}</Alert>}
       
       <div style={styles.progressContainer}>
-        <div style={styles.progressBar}>
-          <div 
-            style={{
-              ...styles.progressFill,
-              width: `${progress}%`,
-              backgroundColor: progress === 100 ? '#4caf50' : '#2196f3'
-            }}
-          />
-        </div>
-        <div style={styles.progressLabel}>{progress}% Complete</div>
+        <ProgressBar progress={progress} />
       </div>
       
-      <div style={styles.statusSummary}>
-        <div style={styles.statusItem}>
-          <span style={styles.statusLabel}>Uploaded</span>
-          <span style={styles.statusCount}>{documentCounts.uploaded}</span>
-        </div>
-        <div style={styles.statusItem}>
-          <span style={styles.statusLabel}>Extracted</span>
-          <span style={styles.statusCount}>{documentCounts.extracted}</span>
-        </div>
-        <div style={styles.statusItem}>
-          <span style={styles.statusLabel}>Processed</span>
-          <span style={styles.statusCount}>{documentCounts.processed}</span>
-        </div>
-        <div style={styles.statusItem}>
-          <span style={styles.statusLabel}>Errors</span>
-          <span style={{
-            ...styles.statusCount,
-            color: documentCounts.error > 0 ? '#f44336' : 'inherit'
-          }}>{documentCounts.error}</span>
-        </div>
+      <div style={styles.statusSummaryContainer}>
+        <FrostedGlass style={styles.statusSummary} variant="standard">
+          <div style={styles.statusItem}>
+            <span style={styles.statusLabel}>Uploaded</span>
+            <span style={styles.statusCount}>{documentCounts.uploaded}</span>
+          </div>
+          <div style={styles.statusItem}>
+            <span style={styles.statusLabel}>Extracted</span>
+            <span style={styles.statusCount}>{documentCounts.extracted}</span>
+          </div>
+          <div style={styles.statusItem}>
+            <span style={styles.statusLabel}>Processed</span>
+            <span style={styles.statusCount}>{documentCounts.processed}</span>
+          </div>
+          <div style={styles.statusItem}>
+            <span style={styles.statusLabel}>Errors</span>
+            <span style={{
+              ...styles.statusCount,
+              color: documentCounts.error > 0 ? theme.colors.error : 'inherit'
+            }}>{documentCounts.error}</span>
+          </div>
+        </FrostedGlass>
       </div>
       
       <div style={styles.documentTypeInfo}>
-        <h3>Document Types</h3>
+        <h3 style={styles.sectionSubtitle}>Document Types</h3>
         <div style={styles.documentTypeList}>
-          <div style={styles.documentTypeItem}>
+          <FrostedGlass style={styles.documentTypeItem} hover={true}>
             <span style={styles.documentTypeLabel}>Syllabus</span>
             <span style={styles.documentTypeCount}>{documentTypeCount.syllabus}</span>
-            {!hasSyllabus && <span style={{...styles.documentTypeWarning, color: '#ff9800'}}>Recommended</span>}
-          </div>
-          <div style={styles.documentTypeItem}>
+            {!hasSyllabus && <span style={styles.documentTypeWarning}>Recommended</span>}
+          </FrostedGlass>
+          <FrostedGlass style={styles.documentTypeItem} hover={true}>
             <span style={styles.documentTypeLabel}>Transcript</span>
             <span style={styles.documentTypeCount}>{documentTypeCount.transcript}</span>
-          </div>
-          <div style={styles.documentTypeItem}>
+          </FrostedGlass>
+          <FrostedGlass style={styles.documentTypeItem} hover={true}>
             <span style={styles.documentTypeLabel}>Grades</span>
             <span style={styles.documentTypeCount}>{documentTypeCount.grades}</span>
-          </div>
+          </FrostedGlass>
         </div>
         
         {documents.length === 0 && (
-          <p style={styles.warningMessage}>
+          <Alert type="warning" style={styles.warningMessage}>
             Upload documents to begin processing. A syllabus is recommended but not required.
-          </p>
+          </Alert>
         )}
       </div>
       
-      {documents.length > 0 && documentCounts.extracted > 0 && (
-        <button 
-          onClick={handleProcessDocuments} 
-          style={styles.processButton}
-          disabled={isProcessing}
-        >
-          {isProcessing ? 'Processing...' : 'Process Documents'}
-        </button>
-      )}
-      
-      {canFormat && (
-        <div>
-          <button 
+      <div style={styles.actionsContainer}>
+        {documents.length > 0 && documentCounts.extracted > 0 && (
+          <Button 
+            onClick={handleProcessDocuments} 
+            disabled={isProcessing}
+            variant="primary"
+          >
+            {isProcessing ? 'Processing...' : 'Process Documents'}
+          </Button>
+        )}
+        
+        {canFormat && (
+          <Button 
             onClick={handleFormatDocuments} 
-            style={styles.formatButton}
             disabled={isFormatting}
+            variant="secondary"
           >
             {isFormatting ? 'Formatting...' : 'Format Documents'}
-          </button>
-        </div>
-      )}
+          </Button>
+        )}
+      </div>
       
       {documents.length > 0 && (
         <div style={styles.documentsList}>
-          <h3>Document Details</h3>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.tableHeader}>Name</th>
-                <th style={styles.tableHeader}>Type</th>
-                <th style={styles.tableHeader}>Status</th>
-                <th style={styles.tableHeader}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {documents.map((doc) => (
-                <tr key={doc.id} style={styles.tableRow}>
-                  <td style={styles.tableCell}>{doc.name || 'Unnamed document'}</td>
-                  <td style={styles.tableCell}>{doc.documentType}</td>
-                  <td style={styles.tableCell}>
-                    <span style={{
-                      ...styles.statusBadge,
-                      backgroundColor: doc.status?.toLowerCase() === 'processed' ? '#4caf50' : 
-                                      doc.status?.toLowerCase() === 'extracted' ? '#ff9800' :
-                                      doc.status?.toLowerCase() === 'error' ? '#f44336' : '#2196f3'
-                    }}>
-                      {doc.status}
-                    </span>
-                  </td>
-                  <td style={styles.tableCell}>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                      {doc.status?.toLowerCase() === 'uploaded' && (
-                        <button
-                          onClick={() => handleRetryProcessing(doc.id)}
-                          style={styles.actionButton}
-                        >
-                          Process Document
-                        </button>
-                      )}
-                      {doc.status?.toLowerCase() === 'error' && (
-                        <button
-                          onClick={() => handleRetryProcessing(doc.id)}
-                          style={styles.actionButton}
-                        >
-                          Retry Processing
-                        </button>
-                      )}
-                    </div>
-                    {doc.error && (
-                      <div style={styles.errorMessage}>
-                        Error: {doc.error}
-                      </div>
-                    )}
-                  </td>
+          <h3 style={styles.sectionSubtitle}>Document Details</h3>
+          <FrostedGlass style={styles.tableWrapper} variant="light">
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.tableHeader}>Name</th>
+                  <th style={styles.tableHeader}>Type</th>
+                  <th style={styles.tableHeader}>Status</th>
+                  <th style={styles.tableHeader}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {documents.map((doc) => (
+                  <tr key={doc.id} style={styles.tableRow}>
+                    <td style={styles.tableCell}>{doc.name || 'Unnamed document'}</td>
+                    <td style={styles.tableCell}>
+                      <span style={styles.documentTypeBadge}>{doc.documentType}</span>
+                    </td>
+                    <td style={styles.tableCell}>
+                      <StatusBadge status={doc.status}/>
+                    </td>
+                    <td style={styles.tableCell}>
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        {doc.status?.toLowerCase() === 'uploaded' && (
+                          <Button
+                            onClick={() => handleRetryProcessing(doc.id)}
+                            size="small"
+                            variant="primary"
+                          >
+                            Process Document
+                          </Button>
+                        )}
+                        {doc.status?.toLowerCase() === 'error' && (
+                          <Button
+                            onClick={() => handleRetryProcessing(doc.id)}
+                            size="small"
+                            variant="primary"
+                          >
+                            Retry Processing
+                          </Button>
+                        )}
+                      </div>
+                      {doc.error && (
+                        <div style={styles.errorMessage}>
+                          Error: {doc.error}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </FrostedGlass>
         </div>
       )}
-    </div>
+    </Card>
   );
 };
 
 const styles = {
   container: {
     padding: '20px',
-    backgroundColor: '#f9f9f9',
-    borderRadius: '8px',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
     marginBottom: '20px',
   },
-  title: {
-    marginTop: 0,
-    color: '#333',
-    borderBottom: '1px solid #eee',
-    paddingBottom: '10px',
+  sectionSubtitle: {
+    color: '#1F0F5C',
+    fontSize: '18px',
+    marginBottom: '15px',
+    fontWeight: 600,
   },
   progressContainer: {
     marginTop: '20px',
     marginBottom: '20px',
   },
-  progressBar: {
-    height: '20px',
-    backgroundColor: '#e0e0e0',
-    borderRadius: '10px',
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    transition: 'width 0.3s ease',
-  },
-  progressLabel: {
-    textAlign: 'center' as const,
-    marginTop: '5px',
-    fontSize: '14px',
-    color: '#666',
+  statusSummaryContainer: {
+    marginBottom: '20px',
   },
   statusSummary: {
     display: 'flex',
     justifyContent: 'space-between',
-    marginBottom: '20px',
     flexWrap: 'wrap' as const,
+    padding: '15px',
   },
   statusItem: {
     flex: '1 1 0',
     textAlign: 'center' as const,
     padding: '10px',
-    backgroundColor: '#fff',
-    borderRadius: '4px',
-    margin: '5px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
   },
   statusLabel: {
     display: 'block',
@@ -444,62 +410,46 @@ const styles = {
   documentTypeList: {
     display: 'flex',
     flexWrap: 'wrap' as const,
-    gap: '10px',
+    gap: '15px',
+    marginBottom: '15px',
   },
   documentTypeItem: {
     flex: '1 1 0',
-    padding: '10px',
-    backgroundColor: '#fff',
-    borderRadius: '4px',
-    boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+    padding: '15px',
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',
+    minWidth: '120px',
   },
   documentTypeLabel: {
     fontSize: '14px',
     color: '#666',
   },
   documentTypeCount: {
-    fontSize: '20px',
+    fontSize: '24px',
     fontWeight: 'bold' as const,
     color: '#333',
+    margin: '5px 0',
   },
   documentTypeWarning: {
     fontSize: '12px',
-    color: '#f44336',
-    marginTop: '5px',
+    color: '#ff9800',
+    fontWeight: 500,
   },
   warningMessage: {
-    color: '#f44336',
-    backgroundColor: '#ffebee',
-    padding: '10px',
-    borderRadius: '4px',
     marginTop: '10px',
   },
-  formatButton: {
-    backgroundColor: '#4CAF50',
-    color: 'white',
-    border: 'none',
-    padding: '10px 20px',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '16px',
+  actionsContainer: {
+    display: 'flex',
+    gap: '15px',
     marginBottom: '20px',
-  },
-  processButton: {
-    backgroundColor: '#4a148c',
-    color: 'white',
-    border: 'none',
-    padding: '10px 20px',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '16px',
-    marginBottom: '20px',
-    marginRight: '10px',
   },
   documentsList: {
-    marginTop: '20px',
+    marginTop: '30px',
+  },
+  tableWrapper: {
+    overflowX: 'auto' as const,
+    borderRadius: '8px',
   },
   table: {
     width: '100%',
@@ -508,51 +458,34 @@ const styles = {
   },
   tableHeader: {
     textAlign: 'left' as const,
-    padding: '10px',
-    backgroundColor: '#f2f2f2',
-    borderBottom: '1px solid #ddd',
+    padding: '12px 15px',
+    backgroundColor: 'rgba(97, 87, 255, 0.1)',
+    color: '#333',
+    fontWeight: 600,
+    borderBottom: '1px solid rgba(97, 87, 255, 0.2)',
   },
   tableRow: {
-    borderBottom: '1px solid #eee',
+    borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+    transition: 'background-color 0.2s',
   },
   tableCell: {
-    padding: '10px',
+    padding: '12px 15px',
+    verticalAlign: 'middle' as const,
   },
-  statusBadge: {
+  documentTypeBadge: {
     display: 'inline-block',
-    padding: '4px 8px',
-    borderRadius: '4px',
-    color: 'white',
-    fontSize: '0.8rem',
-  },
-  actionButton: {
-    backgroundColor: '#2196F3',
-    color: 'white',
-    border: 'none',
     padding: '5px 10px',
+    backgroundColor: 'rgba(97, 87, 255, 0.1)',
+    color: '#6157FF',
     borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '0.8rem',
+    fontSize: '0.9em',
+    fontWeight: 500,
   },
   errorMessage: {
     color: '#f44336',
     fontSize: '0.8rem',
     marginTop: '5px',
-  },
-  error: {
-    color: '#f44336',
-    backgroundColor: '#ffebee',
-    padding: '10px',
-    borderRadius: '4px',
-    marginBottom: '15px',
-  },
-  status: {
-    color: '#2196F3',
-    backgroundColor: '#e3f2fd',
-    padding: '10px',
-    borderRadius: '4px',
-    marginBottom: '15px',
-  },
+  }
 };
 
 export default DocumentProcessingStatus;

@@ -1,189 +1,81 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
-
-declare global {
-  interface Window {
-    particlesJS: (id: string, config: object) => void;
-  }
-}
+import { useTheme } from '../contexts/ThemeContext';
+import ParticleBackground from './common/ParticleBackground';
+import FrostedGlass from './common/FrostedGlass';
+import { Input, Button, Alert } from './common/index';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
+  const [fadeIn, setFadeIn] = useState(false);
   const { signInWithGoogle, signInWithEmail, signUpWithEmail } = useAuth();
+  const { theme } = useTheme();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Add global styles
+    // Add animation effects
     const styleTag = document.createElement('style');
     styleTag.innerHTML = `
-      @font-face {
-        font-family: 'Sansation';
-        src: url('https://fonts.cdnfonts.com/css/sansation') format('woff2');
-        font-weight: 400;
-        font-style: normal;
+      .login-card-animation {
+        animation: cardFadeIn 0.6s ease-out forwards;
       }
       
-      body {
-        margin: 0;
-        background: linear-gradient(135deg, #130A39 0%, #1F0F5C 50%, #341873 100%);
-        overflow-x: hidden;
-        font-family: 'Sansation', sans-serif;
+      @keyframes cardFadeIn {
+        0% {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        100% {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
       
-      #particles-js {
-        position: fixed;
-        width: 100%;
-        height: 100%;
-        top: 0;
-        left: 0;
-        z-index: 0;
+      .separator {
+        display: flex;
+        align-items: center;
+        text-align: center;
+        margin: 20px 0;
+        color: #AEB9E1;
       }
       
-      .glow {
-        filter: drop-shadow(0 0 8px rgba(174, 185, 225, 0.6));
+      .separator::before,
+      .separator::after {
+        content: '';
+        flex: 1;
+        border-bottom: 1px solid rgba(174, 185, 225, 0.3);
       }
       
-      @keyframes gradientBorder {
-        0% { border-color: #7063A7; }
-        50% { border-color: #9A8BD0; }
-        100% { border-color: #7063A7; }
+      .separator::before {
+        margin-right: 10px;
       }
       
-      
-      .card-hover {
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      .separator::after {
+        margin-left: 10px;
       }
       
-      .card-hover:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+      .logo-glow {
+        filter: drop-shadow(0 0 8px rgba(97, 87, 255, 0.6));
+        transition: filter 0.3s ease;
+      }
+      
+      .logo-glow:hover {
+        filter: drop-shadow(0 0 12px rgba(97, 87, 255, 0.8));
       }
     `;
     document.head.appendChild(styleTag);
+    
+    // Trigger fade-in animation
+    setTimeout(() => {
+      setFadeIn(true);
+    }, 100);
 
-    // Dynamically load particles.js script
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js';
-    script.async = true;
-    script.onload = () => {
-      // Initialize particles.js after script is loaded
-      window.particlesJS('particles-js', {
-        "particles": {
-          "number": {
-            "value": 80,
-            "density": {
-              "enable": true,
-              "value_area": 800
-            }
-          },
-          "color": {
-            "value": ["#AEB9E1", "#9A8BD0", "#7063A7", "#6157FF"]
-          },
-          "shape": {
-            "type": "circle",
-            "stroke": {
-              "width": 0,
-              "color": "#000000"
-            },
-            "polygon": {
-              "nb_sides": 5
-            }
-          },
-          "opacity": {
-            "value": 0.6,
-            "random": true,
-            "anim": {
-              "enable": true,
-              "speed": 1,
-              "opacity_min": 0.1,
-              "sync": false
-            }
-          },
-          "size": {
-            "value": 4,
-            "random": true,
-            "anim": {
-              "enable": false,
-              "speed": 40,
-              "size_min": 0.1,
-              "sync": false
-            }
-          },
-          "line_linked": {
-            "enable": true,
-            "distance": 150,
-            "color": "#AEB9E1",
-            "opacity": 0.4,
-            "width": 1
-          },
-          "move": {
-            "enable": true,
-            "speed": 6,
-            "direction": "none",
-            "random": false,
-            "straight": false,
-            "out_mode": "out",
-            "bounce": false,
-            "attract": {
-              "enable": false,
-              "rotateX": 600,
-              "rotateY": 1200
-            }
-          }
-        },
-        "interactivity": {
-          "detect_on": "canvas",
-          "events": {
-            "onhover": {
-              "enable": true,
-              "mode": "repulse"
-            },
-            "onclick": {
-              "enable": true,
-              "mode": "push"
-            },
-            "resize": true
-          },
-          "modes": {
-            "grab": {
-              "distance": 400,
-              "line_linked": {
-                "opacity": 1
-              }
-            },
-            "bubble": {
-              "distance": 400,
-              "size": 40,
-              "duration": 2,
-              "opacity": 8,
-              "speed": 3
-            },
-            "repulse": {
-              "distance": 200,
-              "duration": 0.4
-            },
-            "push": {
-              "particles_nb": 4
-            },
-            "remove": {
-              "particles_nb": 2
-            }
-          }
-        },
-        "retina_detect": false
-      });
-    };
-    document.body.appendChild(script);
-
-    // Cleanup
     return () => {
       document.head.removeChild(styleTag);
-      const scriptElement = document.querySelector('script[src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"]');
-      if (scriptElement) document.body.removeChild(scriptElement);
     };
   }, []);
 
@@ -214,6 +106,10 @@ const Login: React.FC = () => {
     }
   };
 
+  const navigateToHome = () => {
+    navigate('/');
+  };
+
   // Google G logo SVG
   const GoogleLogo = () => (
     <svg width="18" height="18" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
@@ -227,42 +123,160 @@ const Login: React.FC = () => {
 
   return (
     <>
-      <div id="particles-js"></div>
+      {/* Custom particle background matching landing page */}
+      <ParticleBackground 
+        id="login-particles" 
+        config={{
+          particles: {
+            number: {
+              value: 80,
+              density: { enable: true, value_area: 800 }
+            },
+            color: {
+              value: ["#AEB9E1", "#9A8BD0", "#7063A7", "#6157FF"]
+            },
+            opacity: {
+              value: 0.6,
+              random: true,
+              anim: { enable: true, speed: 1, opacity_min: 0.1, sync: false }
+            },
+            size: {
+              value: 4,
+              random: true
+            },
+            line_linked: {
+              enable: true,
+              distance: 150,
+              color: "#AEB9E1",
+              opacity: 0.4,
+              width: 1
+            },
+            move: {
+              enable: true,
+              speed: 6,
+              direction: "none",
+              random: false,
+              straight: false,
+              out_mode: "out",
+              bounce: false
+            }
+          },
+          interactivity: {
+            detect_on: "canvas",
+            events: {
+              onhover: {
+                enable: true,
+                mode: "repulse"
+              },
+              onclick: {
+                enable: true,
+                mode: "push"
+              },
+              resize: true
+            }
+          }
+        }}
+      />
       
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <h2 style={styles.title}>{isSignUp ? 'Sign Up' : 'Login'}</h2>
+      <div style={styles.pageContainer}>
+        {/* Navigation Bar */}
+        <FrostedGlass
+          variant="dark" 
+          blur={8} 
+          elevation="high"
+          style={styles.navbar}
+          className={fadeIn ? 'login-card-animation' : ''}
+        >
+          <div style={styles.navbarContent}>
+            {/* Logo */}
+            <div 
+              style={styles.logoContainer} 
+              className="card-hover"
+              onClick={navigateToHome}
+            >
+              <h2 style={{
+              margin: 0,
+              color: 'white',
+              fontSize: '1.5rem',
+              fontWeight: 600,
+              background: 'linear-gradient(90deg, #FFFFFF, #AEB9E1)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}>GradeScape</h2>
+            </div>
+          </div>
+        </FrostedGlass>
+      
+        <FrostedGlass 
+          variant="dark"
+          blur={12}
+          elevation="high"
+          radius={12}
+          style={styles.card}
+          className={fadeIn ? 'login-card-animation' : ''}
+        >
+        
+          <h2 style={styles.title}>
+            {isSignUp ? 'Create Account' : 'Welcome Back'}
+          </h2>
+          <p style={styles.subtitle}>
+            {isSignUp 
+              ? 'Sign up to start tracking your academic progress' 
+              : 'Sign in to access your grade predictions'}
+          </p>
           
-          {error && <p style={styles.error}>{error}</p>}
+          {error && (
+            <Alert type="error" style={styles.alert}>{error}</Alert>
+          )}
           
           <form onSubmit={handleSubmit} style={styles.form}>
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={styles.input}
-              required
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              style={styles.input}
-              required
-            />
-            <button type="submit" style={styles.button}>
+            <div className="input-field">
+              <Input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                label="Email Address"
+                id="email"
+                style={styles.input}
+              />
+            </div>
+            
+            <div className="input-field">
+              <Input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                label="Password"
+                id="password"
+                style={styles.input}
+              />
+            </div>
+            
+            <Button 
+              type="submit" 
+              variant="primary" 
+              fullWidth 
+              style={styles.submitButton}
+            >
               {isSignUp ? 'Sign Up' : 'Login'}
-            </button>
+            </Button>
           </form>
 
-          <button onClick={handleGoogleSignIn} style={styles.googleButton}>
-            <div style={styles.googleButtonContent}>
-              <GoogleLogo />
-              <span style={styles.googleButtonText}>Sign in with Google</span>
-            </div>
-          </button>
+          <div className="separator">OR</div>
+
+          <Button 
+            onClick={handleGoogleSignIn} 
+            variant="secondary"
+            fullWidth
+            icon={<GoogleLogo />}
+            style={styles.googleButton}
+          >
+            Continue with Google
+          </Button>
 
           <p style={styles.toggle}>
             {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
@@ -273,96 +287,111 @@ const Login: React.FC = () => {
               {isSignUp ? 'Login' : 'Sign Up'}
             </span>
           </p>
-        </div>
+        </FrostedGlass>
       </div>
     </>
   );
 };
 
 const styles = {
-  container: {
+  pageContainer: {
     display: 'flex',
+    flexDirection: 'column' as const,
     justifyContent: 'center',
     alignItems: 'center',
     minHeight: '100vh',
+    padding: '20px',
+  },
+  navbar: {
+    width: '100%',
+    position: 'fixed' as const,
+    top: 0,
+    zIndex: 100,
+  },
+  navbarContent: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: '1200px',
+    margin: '0 auto',
+    padding: '1rem 2rem',
+  },
+  logoContainer: {
+    cursor: 'pointer',
+    transition: 'transform 0.3s ease',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  logo: {
+    height: '40px',
+    width: 'auto',
+  },
+  input: {
+    width: '100%',
+    boxSizing: 'border-box' as const,
+  },
+  cardLogoContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginBottom: '20px',
+  },
+  cardLogo: {
+    height: '60px',
+    width: 'auto',
   },
   card: {
-    padding: '2rem',
-    backgroundColor: '#1E1350',
-    borderRadius: '8px',
-    boxShadow: '0px 0px 20px 8px  #3E28A2',
     width: '100%',
     maxWidth: '400px',
     zIndex: 1,
+    padding: '32px',
+    opacity: 0, 
+    border: '1px solid rgba(174, 185, 225, 0.2)',
   },
   title: {
     textAlign: 'center' as const,
-    marginBottom: '1.5rem',
+    marginBottom: '0.5rem',
+    color: 'white',
+    fontSize: '28px',
+    fontWeight: 600,
+    background: 'linear-gradient(90deg, #FFFFFF, #AEB9E1)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+  },
+  subtitle: {
+    textAlign: 'center' as const,
+    marginBottom: '2rem',
     color: '#AEB9E1',
+    fontSize: '16px',
+  },
+  alert: {
+    marginBottom: '20px',
   },
   form: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '1rem',
+    gap: '16px',
   },
-  input: {
-    padding: '0.75rem',
-    backgroundColor: '#130A39',
-    borderRadius: '4px',
-    border: '1px solid rgba(174, 185, 225, 0.4)',
-    fontSize: '1rem',
-    color: '#AEB9E1',
-  },
-  button: {
-    padding: '0.75rem',
-    backgroundColor: '#7063A7',
-    color: '#AEB9E1',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '1rem',
-    cursor: 'pointer',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
+  submitButton: {
+    marginTop: '10px',
+    background: 'linear-gradient(90deg, #7063A7, #6157FF)',
+    boxShadow: '0 4px 15px rgba(97, 87, 255, 0.4)',
   },
   googleButton: {
-    marginTop: '1rem',
-    padding: '0.75rem',
-    backgroundColor: 'white',
-    color: '#444',
-    border: 'none',
-    borderRadius: '4px',
-    fontSize: '1rem',
-    cursor: 'pointer',
-    width: '100%',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
-  },
-  googleButtonContent: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  googleButtonText: {
-    marginLeft: '10px',
-    fontWeight: '500' as const,
-  },
-  error: {
-    color: '#dc3545',
-    textAlign: 'center' as const,
-    marginBottom: '1rem',
+    fontWeight: 500,
+    padding: '12px',
   },
   toggle: {
-    marginTop: '1rem',
+    marginTop: '1.5rem',
     textAlign: 'center' as const,
     color: '#AEB9E1',
+    fontSize: '14px',
   },
   toggleLink: {
-    color: 'rgb(159, 139, 247)',
+    color: 'white',
     cursor: 'pointer',
+    fontWeight: 500,
+    textDecoration: 'underline',
   },
 };
 
