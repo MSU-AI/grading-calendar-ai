@@ -535,7 +535,7 @@ export const Tip: React.FC<TipProps> = ({
   const { theme } = useTheme();
   
   const tipStyle: React.CSSProperties = {
-    backgroundColor: 'rgba(97, 87, 255, 0.08)',
+    backgroundColor: theme.colors.primary + '14', // 14 is 0.08 in hex (8% opacity)
     padding: '15px',
     borderRadius: '8px',
     marginTop: '15px',
@@ -570,20 +570,6 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
 }) => {
   const { theme } = useTheme();
   
-  // Determine the color based on status
-  const getStatusColor = () => {
-    const lowerStatus = status.toLowerCase();
-    if (lowerStatus === 'processed' || lowerStatus === 'completed' || lowerStatus === 'success') {
-      return theme.colors.success;
-    } else if (lowerStatus === 'processing' || lowerStatus === 'uploaded' || lowerStatus === 'extracted') {
-      return theme.colors.warning;
-    } else if (lowerStatus === 'error' || lowerStatus === 'failed') {
-      return theme.colors.error;
-    } else {
-      return theme.colors.primary;
-    }
-  };
-  
   const badgeStyle: React.CSSProperties = {
     display: 'inline-block',
     padding: '5px 10px',
@@ -591,7 +577,18 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
     color: 'white',
     fontSize: '0.9em',
     fontWeight: 500,
-    backgroundColor: getStatusColor(),
+    backgroundColor: (() => {
+      const lowerStatus = status.toLowerCase();
+      if (lowerStatus === 'processed' || lowerStatus === 'completed' || lowerStatus === 'success') {
+        return theme.colors.success;
+      } else if (lowerStatus === 'processing' || lowerStatus === 'uploaded' || lowerStatus === 'extracted') {
+        return theme.colors.warning;
+      } else if (lowerStatus === 'error' || lowerStatus === 'failed') {
+        return theme.colors.error;
+      } else {
+        return theme.colors.primary;
+      }
+    })(),
     ...style,
   };
   
